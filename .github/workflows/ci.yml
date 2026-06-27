@@ -1,0 +1,41 @@
+# .github/workflows/ci.yml
+#
+# Runs on every PR. Same builds as release.yml but without the publish step
+# — catches packaging breakage before it merges.
+#
+# Note: this does NOT run on push to main. The release workflow already
+# builds artifacts on main; running CI there too would be duplicated work.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: bash scripts/build-linux.sh
+      - run: ls -lh dist/
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: pwsh
+        run: scripts\build-windows.ps1
+      - shell: pwsh
+        run: Get-ChildItem dist

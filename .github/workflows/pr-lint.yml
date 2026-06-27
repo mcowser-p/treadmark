@@ -1,0 +1,69 @@
+# .github/workflows/pr-lint.yml
+#
+# Blocks PRs whose title doesn't match the Conventional Commits spec.
+# Critical: we use squash-and-merge with "Default to PR title for squash
+# merge commits" enabled, so the PR title becomes the commit message on
+# main, which is what semantic-release reads. This workflow protects that
+# pipeline from non-conventional commits sneaking in.
+#
+# Examples of valid PR titles:
+#   feat: add Windows registry baseline support
+#   fix(linux): handle ENOENT during walk
+#   feat(api)!: rename baseline format (breaking)
+#   chore: bump pyyaml to 6.0.2
+#
+# Repo settings to verify after merging this:
+#   Settings → General → Pull Requests
+#     ✓ Allow squash merging
+#     ✓ Default to PR title for squash merge commits
+#     ☐ Allow merge commits   (off — keeps history linear)
+#     ☐ Allow rebase merging  (off — bypasses PR titles)
+#   Settings → Branches → Branch protection rule for `main`
+#     ✓ Require status checks to pass: "Validate PR title"
+
+name: pr-lint
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Only allow types that map to something semantic-release knows about.
+          # Anything else (e.g. "wip:", "update:") is rejected.
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            style
+            test
+            ci
+            chore
+            build
+          # Subject must start lowercase. Convention; relaxes if your team
+          # prefers Sentence-case — just remove this regex.
+          subjectPattern: ^[a-z].*$
+          subjectPatternError: |
+            The subject "{subject}" of PR title "{title}" should start with a
+            lowercase letter. Example: "feat: add registry monitor" not
+            "feat: Add registry monitor".
+          # If a PR has a single commit, ensure that commit also matches.
+          # When you squash-merge with PR-title-as-commit, this is belt+braces.
+          validateSingleCommit: true
+          validateSingleCommitMatchesPrTitle: true

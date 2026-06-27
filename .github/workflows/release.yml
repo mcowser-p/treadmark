@@ -1,0 +1,168 @@
+# .github/workflows/release.yml
+#
+# Triggered by every push to main. semantic-release decides whether a release
+# is warranted (presence of feat:/fix:/BREAKING since the last tag), bumps the
+# version, tags, and creates a GitHub Release. Build jobs then attach
+# artifacts to that release.
+#
+# Flow:
+#   1. release job: python-semantic-release analyzes commits, bumps version
+#      in pyproject.toml, commits, tags, and creates the GH Release.
+#   2. If released == true:
+#        linux job builds wheel + binary + .deb + .rpm for x86_64 and arm64
+#        windows job builds .exe + .msi
+#   3. attach job downloads all artifacts, generates SHA256SUMS, uploads
+#      everything to the GH Release.
+#
+# semantic-release's release commit is tagged with [skip ci] so it doesn't
+# loop on itself.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write     # semantic-release needs to push tags + commit
+  issues: write       # for releases that close issues via "Closes #123"
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false   # never cancel a release mid-flight
+
+jobs:
+  # =========================================================================
+  # 1. Decide if a release is warranted; if so, tag and create GH Release.
+  # =========================================================================
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.semrel.outputs.released }}
+      version:  ${{ steps.semrel.outputs.version }}
+      tag:      ${{ steps.semrel.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # semantic-release needs the full history to analyze commits
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run python-semantic-release
+        id: semrel
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize
+        run: |
+          echo "released: ${{ steps.semrel.outputs.released }}"
+          echo "version:  ${{ steps.semrel.outputs.version }}"
+          echo "tag:      ${{ steps.semrel.outputs.tag }}"
+
+  # =========================================================================
+  # 2a. Build Linux artifacts at the new version.
+  # =========================================================================
+  linux:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the commit semantic-release just made — it has the
+          # bumped version in pyproject.toml.
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install rpm tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: build wheel + binary + deb + rpm
+        run: bash scripts/build-linux.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            dist/*.whl
+            dist/cairn-linux-${{ matrix.arch }}
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error
+
+  # =========================================================================
+  # 2b. Build Windows artifacts at the new version.
+  # =========================================================================
+  windows:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: build binary + msi
+        shell: pwsh
+        run: scripts\build-windows.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            dist/cairn-windows-x86_64.exe
+            dist/*.msi
+          if-no-files-found: error
+
+  # =========================================================================
+  # 3. Attach all artifacts to the GitHub Release semantic-release created.
+  # =========================================================================
+  attach:
+    needs: [release, linux, windows]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: flatten + checksum
+        run: |
+          mkdir -p release/
+          find artifacts/ -type f -exec cp -t release/ {} +
+          cd release/
+          sha256sum * > SHA256SUMS
+          ls -la
+
+      # Optional GPG signing of the checksums file. Skipped silently if the
+      # secret is absent; uncomment / configure once you have the key set up.
+      - name: sign SHA256SUMS
+        if: env.RELEASE_GPG_KEY != ''
+        env:
+          RELEASE_GPG_KEY: ${{ secrets.RELEASE_GPG_KEY }}
+        run: |
+          echo "$RELEASE_GPG_KEY" | gpg --batch --import
+          gpg --batch --yes --detach-sign --armor release/SHA256SUMS
+
+      - name: upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          files: release/*
+          fail_on_unmatched_files: true

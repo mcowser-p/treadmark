@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  cairn.wxs — WiX v4/v5/v6/v7 source for the Cairn MSI installer.
+
+  Build (run on a Windows host with .NET SDK):
+      dotnet tool install -g wix
+      wix extension add -g WixToolset.Util.wixext
+      wix extension add -g WixToolset.UI.wixext
+      wix build cairn.wxs -arch x64 -d Version=0.2.0 -o cairn-0.2.0.msi `
+                -ext WixToolset.Util.wixext `
+                -ext WixToolset.UI.wixext
+
+  What this MSI does on install:
+    1. Copies cairn.exe to %ProgramFiles%\Cairn\
+    2. Adds that folder to the system PATH
+    3. Drops a default config at %ProgramData%\Cairn\cairn.yaml (only if absent)
+    4. Creates the data directory %ProgramData%\Cairn\ (the baseline DB lives here)
+    5. Adds an entry to "Programs and Features" so it can be uninstalled normally
+
+  What this MSI deliberately does NOT do:
+    - Register a Scheduled Task. Scheduling is an explicit ops decision —
+      the example schtasks command is in windows\examples\register-cairn-task.ps1.
+    - Build the initial baseline. Operators run `cairn files init` after
+      editing the config.
+
+  On uninstall:
+    - Removes cairn.exe and the install dir
+    - PRESERVES the config and baseline DB under %ProgramData%\Cairn (operators
+      have tuned their config; never wipe it without an explicit gesture)
+
+  On upgrade:
+    - MajorUpgrade with downgrade prevention; new version replaces the old
+      cleanly without an uninstall-then-install dance.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <!--
+    UpgradeCode is the immortal identifier for this product line. Once chosen
+    NEVER change it. This is the GUID baked in for cairn at v0.2.0.
+  -->
+  <Package
+    Name="Cairn File Integrity Monitor"
+    Manufacturer="Your Org"
+    Version="$(var.Version)"
+    UpgradeCode="930ffdcd-a101-4776-8189-816e224d76fb"
+    Scope="perMachine"
+    InstallerVersion="500"
+    Compressed="yes">
+
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+      Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="CairnIcon" SourceFile="cairn.ico" />
+    <Property Id="ARPPRODUCTICON" Value="CairnIcon" />
+    <Property Id="ARPHELPLINK" Value="https://example.com/cairn" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Cairn" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <!-- C:\ProgramData\Cairn — config + baseline DB live here. -->
+      <Directory Id="DATAFOLDER" Name="Cairn" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Cairn" Level="1" Display="expand">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="DataDir" />
+      <ComponentGroupRef Id="EnvVars" />
+    </Feature>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="CairnExe" Guid="*">
+        <File Id="CairnExeFile"
+              Source="cairn-windows-x86_64.exe"
+              Name="cairn.exe"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DataDir" Directory="DATAFOLDER">
+      <!--
+        Default config. NeverOverwrite + Permanent is the magic that protects
+        an operator's tuned config across upgrades and uninstalls.
+      -->
+      <Component Id="DefaultConfig" Guid="*" NeverOverwrite="yes" Permanent="yes">
+        <File Id="DefaultConfigFile"
+              Source="cairn.yaml"
+              Name="cairn.yaml"
+              KeyPath="yes" />
+      </Component>
+
+      <!--
+        Empty data subdirectory for the baseline DB. CreateFolder in a component
+        with no files is the WiX idiom for "make this directory". Permanent="yes"
+        so the baseline DB survives uninstall.
+      -->
+      <Component Id="DataSubdir" Guid="*" Permanent="yes">
+        <CreateFolder>
+          <util:PermissionEx User="Administrators" GenericAll="yes" />
+          <util:PermissionEx User="SYSTEM"          GenericAll="yes" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM"
+                       Key="Software\YourOrg\Cairn"
+                       Name="DataDir"
+                       Type="string"
+                       Value="[DATAFOLDER]"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="EnvVars" Directory="INSTALLFOLDER">
+      <Component Id="PathEntry" Guid="*">
+        <Environment Id="PathVar"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Action="set"
+                     Part="last"
+                     System="yes"
+                     Permanent="no" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\YourOrg\Cairn"
+                       Name="PathRegistered"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+  </Package>
+</Wix>

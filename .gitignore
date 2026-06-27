@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Build outputs
+build/
+dist/
+*.whl
+*.deb
+*.rpm
+*.msi
+*.exe.tmp
+
+# PyInstaller
+*.spec.bak
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# cairn runtime data (in case anyone tests in-tree)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+cairn-baseline*.db
+
+# WiX intermediate
+*.wixobj
+*.wixpdb
+
+# Local secrets — never commit
+.env
+.env.local
+*.pem
+*.key
+*.gpg
+secrets/
+
+# Logs
+*.log
+
+# Tooling
+.coverage
+.pytest_cache/
+.tox/
+.mypy_cache/
+.ruff_cache/
+htmlcov/

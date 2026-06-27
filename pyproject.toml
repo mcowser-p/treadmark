@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cairn"
+version = "0.2.0"
+description = "Cross-platform File Integrity Monitor (Linux + Windows)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Your Org" }]
+keywords = ["fim", "file-integrity", "security", "aide", "tripwire", "baseline"]
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: System :: Monitoring",
+]
+
+# Core has zero hard runtime dependencies. PyYAML is optional for YAML
+# config support (JSON works without it). pywin32 is optional and only
+# meaningful on Windows.
+dependencies = []
+
+[project.optional-dependencies]
+yaml    = ["PyYAML>=6.0"]
+windows = ["pywin32>=305; sys_platform == 'win32'"]
+all     = ["PyYAML>=6.0", "pywin32>=305; sys_platform == 'win32'"]
+build   = ["pyinstaller>=6.0"]
+
+[project.scripts]
+cairn = "cairn.__main__:main"
+
+[project.urls]
+Homepage = "https://example.com/cairn"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cairn"]
+
+# ---------------------------------------------------------------------------
+# python-semantic-release configuration
+# ---------------------------------------------------------------------------
+# Versions are derived from conventional commits on `main`:
+#   feat:     → MINOR bump
+#   fix:      → PATCH bump
+#   anything with `BREAKING CHANGE:` footer or `!` after type → MAJOR bump
+#   chore/docs/test/refactor/style/ci → no release (unless major)
+#
+# semantic-release will:
+#   1. Analyze commits since the last tag
+#   2. If a release is warranted, write the new version into pyproject.toml
+#      (the version_toml line below tells it WHERE)
+#   3. Update CHANGELOG.md
+#   4. Commit the changes back to main
+#   5. Tag the commit (vX.Y.Z)
+#   6. Create a GitHub Release
+# Build artifacts are then attached by the workflow's downstream build job.
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+build_command = ""                       # we build artifacts in a separate job
+upload_to_pypi = false                   # we ship .deb/.rpm/.msi, not a PyPI package
+upload_to_release = false                # uploads happen in the build job, not here
+commit_message = "chore(release): {version} [skip ci]"
+tag_format = "v{version}"
+major_on_zero = false                    # 0.x stays 0.x until you ship 1.0 manually
+allow_zero_version = true
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    "^chore\\(release\\):",              # don't list the bot's own release commits
+    "^Merge pull request",
+    "^Merge branch",
+]
+
+[tool.semantic_release.commit_parser_options]
+# Standard conventional-commits types. Listed types that bump versions:
+allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "style", "test", "ci", "chore", "build"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
