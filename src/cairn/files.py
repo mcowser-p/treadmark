@@ -691,7 +691,9 @@ def diff_records(old: FileRecord, new: FileRecord, cfg: dict) -> list[str]:
     if int(old.mtime) != int(new.mtime) and not any(
         c.startswith("content") or c.startswith("size") for c in changes
     ):
-        changes.append(f"mtime {old.mtime:.0f}→{new.mtime:.0f}")
+        # Truncate (not round) so the displayed values can never be equal —
+        # the comparison above truncates, and "mtime X→X" reads as a bug.
+        changes.append(f"mtime {int(old.mtime)}→{int(new.mtime)}")
 
     if cfg.get("track_access_time") and old.atime != new.atime:
         changes.append("atime changed")
