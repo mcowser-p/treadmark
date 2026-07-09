@@ -1,5 +1,10 @@
 # Contributing to cairn
 
+> **AI coding agents** (Codex, Claude Code, Copilot, …): see
+> [AGENTS.md](AGENTS.md) for repo layout, testing rules, and invariants.
+> The commit conventions below apply to you exactly as to humans — your
+> commit types decide whether a release ships.
+
 ## How releases work
 
 cairn uses [Conventional Commits](https://www.conventionalcommits.org/) to drive automated releases. Every PR title that lands on `main` is parsed by [python-semantic-release](https://python-semantic-release.readthedocs.io/), which decides whether a release is warranted and what the next version number should be.
@@ -78,10 +83,18 @@ When your PR lands on `main`:
 ## Local checks before opening a PR
 
 ```sh
+# Run the test suite (CI gates every PR and every release on this)
+pip install -e ".[dev]"
+pytest
+
 # Make sure the package still builds
 bash scripts/build-linux.sh
 
-# Make sure your commit message previews correctly
+# Enable commit-message enforcement once per clone
+# (scripts/bootstrap.sh does this automatically)
+git config core.hooksPath .githooks
+
+# Or preview a message by hand
 echo "feat(scope): subject" | grep -E '^(feat|fix|perf|refactor|docs|style|test|ci|chore|build)(\([^)]+\))?!?: [a-z]'
 ```
 
@@ -97,5 +110,6 @@ For maintainers — when first wiring this up, verify:
 
 **Settings → Branches → Branch protection rule for `main`:**
 - ✅ Require pull request before merging
-- ✅ Require status checks: `Validate PR title`, `linux`, `windows`
+- ✅ Require status checks: `Validate PR title`, `test`, `linux`
+  (add `windows` back when the Windows CI jobs are re-enabled)
 - ✅ Require branches to be up to date before merging
