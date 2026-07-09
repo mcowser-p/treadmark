@@ -47,6 +47,14 @@ fi
 echo ">>> Installing cairn in editable mode for local testing..."
 python3 -m pip install -e ".[all]" $PIP_FLAGS
 
+# Conventional-commit enforcement: PR titles/commits drive releases via
+# python-semantic-release, so catch malformed messages at commit time.
+if [ -d .git ] && [ -d .githooks ]; then
+    echo ">>> Enabling repo git hooks (.githooks/commit-msg)..."
+    git config core.hooksPath .githooks
+    chmod +x .githooks/* 2>/dev/null || true
+fi
+
 echo ""
 echo "Bootstrap complete. Try:"
 echo "  cairn --version"

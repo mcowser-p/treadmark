@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+# .githooks/commit-msg — enforce Conventional Commits locally.
+#
+# The squash-merged PR title becomes the commit on main, and
+# python-semantic-release parses it to decide releases — so malformed
+# messages are caught here before they ever reach a PR.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# (scripts/bootstrap.sh does this automatically.)
+
+msg=$(head -n1 "$1")
+
+# Exempt machine-generated and workflow messages.
+case "$msg" in
+    "chore(release):"*|Merge*|Revert*|fixup!*|squash!*) exit 0 ;;
+esac
+
+if printf '%s' "$msg" | grep -qE '^(feat|fix|perf|refactor|docs|style|test|ci|chore|build)(\([^)]+\))?!?: [a-z]'; then
+    exit 0
+fi
+
+cat >&2 <<EOF
+[!] commit message does not follow Conventional Commits:
+
+      $msg
+
+    Expected:  <type>[(scope)][!]: <lowercase imperative subject>
+    Types:     feat fix perf refactor docs style test ci chore build
+    Examples:  feat(footprint): parse polkit rules
+               fix(linux): handle ENOENT during walk
+
+    feat: triggers a minor release, fix:/perf: a patch release.
+    See CONTRIBUTING.md. Bypass (rarely justified): git commit --no-verify
+EOF
+exit 1
