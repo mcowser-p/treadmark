@@ -6,6 +6,9 @@ All notable changes to cairn are documented here. The format follows [Keep a Cha
 
 ### Features
 
+- Curated noise excludes in the default `/etc/cairn/cairn.yaml`: package-manager bookkeeping, caches, package-tool backup droppings, initramfs images, and `/run` are now excluded out of the box, while classic tamper targets (`/etc/hosts`, CA bundles, `/etc/machine-id`, SSH host keys, the kernel image) stay watched. A commented-out "golden baseline / cross-host compare" block covers per-host identity files. **Upgrade note:** on a host with an existing baseline, the next scan reports newly-excluded paths as deleted once — accept them with `cairn files update --accept`.
+- `cairn footprint` embeds container image metadata (`USER`, `ENTRYPOINT`, `CMD`, `ENV`, exposed ports) from `<root>.inspect.json` when scanning with `--root`, and detects unfaithful rootfs extractions (non-root `docker export | tar -x` drops uid/gid and setuid bits), stamping `fidelity: degraded` into the report and warning on scans.
+
 - `cairn footprint` — capture an application's install-time footprint as a structured JSON model for least-privilege policy generation. Parses systemd units (identity, exec, capabilities, hardening, directory directives), cron jobs, `/etc/passwd` and `/etc/group` diffs including membership changes on existing groups, sudoers rules, setuid/setgid binaries, and file capabilities. Emits per-principal `access_hints` with provenance, and severity-ranked `risks`.
 - `--root DIR` on `cairn files` and `cairn footprint` — treat DIR as `/` when scanning a mounted disk image, extracted container rootfs, or chroot. Baselines store logical paths, so a baseline captured from one rootfs can be diffed against another.
 - `scripts/container-rootfs.sh` — extract a container image's flattened filesystem plus its image metadata for footprinting.

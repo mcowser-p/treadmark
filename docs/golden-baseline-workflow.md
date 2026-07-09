@@ -89,7 +89,14 @@ When a host alerts, the JSON shows you exactly what changed. Three categories:
 
 ## Handling host-specific files
 
-Some files legitimately differ per-host. Common offenders:
+Some files legitimately differ per-host. The shipped `/etc/cairn/cairn.yaml`
+already contains this list as a commented-out **"Golden-baseline / cross-host
+compares"** block at the bottom of its `exclude:` section — uncomment it when
+the config feeds cross-host compares. (It ships commented out because these
+same files are legitimate tamper targets on a single host: a changed
+`/etc/hosts` or SSH host key is exactly what a forensic scan should catch.)
+
+Common offenders:
 
 ```yaml
 exclude:
