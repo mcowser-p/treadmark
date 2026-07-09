@@ -1,0 +1,19 @@
+# Lima template: Ubuntu 24.04 LTS VM for full-VM smoke testing.
+# Used by scripts/smoke-vm.sh — see that script for the workflow.
+# Images are the official Canonical "latest release" symlinks.
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+cpus: 2
+memory: "2GiB"
+disk: "10GiB"
+
+# Read-only view of the home directory so the VM can reach the repo's
+# dist/ artifacts and scripts/smoke-test.sh at their host paths.
+mounts:
+  - location: "~"
+    writable: false

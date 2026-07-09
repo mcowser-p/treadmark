@@ -1,0 +1,21 @@
+# Lima template: AlmaLinux 10 VM for full-VM smoke testing.
+# Used by scripts/smoke-vm.sh — see that script for the workflow.
+# Unlike a container, this boots a real systemd with SELinux ENFORCING,
+# which is the point of the VM-level pass.
+# Images are the official AlmaLinux "GenericCloud-latest" symlinks.
+
+images:
+  - location: "https://repo.almalinux.org/almalinux/10/cloud/x86_64/images/AlmaLinux-10-GenericCloud-latest.x86_64.qcow2"
+    arch: "x86_64"
+  - location: "https://repo.almalinux.org/almalinux/10/cloud/aarch64/images/AlmaLinux-10-GenericCloud-latest.aarch64.qcow2"
+    arch: "aarch64"
+
+cpus: 2
+memory: "2GiB"
+disk: "10GiB"
+
+# Read-only view of the home directory so the VM can reach the repo's
+# dist/ artifacts and scripts/smoke-test.sh at their host paths.
+mounts:
+  - location: "~"
+    writable: false
