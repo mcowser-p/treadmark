@@ -179,6 +179,23 @@ cairn files scan --config C:\ProgramData\Cairn\cairn.yaml --report drift.md
 
 If anything's off, file a `fix:` PR; semantic-release will cut the patch automatically when it merges.
 
+## Pre-publish TODO (placeholders still in the tree)
+
+These don't block the release *mechanics* — the pipeline runs fine with
+them — but they must be replaced before a release goes public:
+
+1. `pyproject.toml` — `authors = [{ name = "Your Org" }]` and
+   `Homepage = "https://example.com/cairn"`
+2. `LICENSE` — copyright holder
+3. `scripts/build-deb.sh` — `Maintainer:` and `Homepage:` fields
+4. `packaging/cairn.spec` — `URL:` and the changelog maintainer email
+5. `src/cairn/report.py` — the SARIF `informationUri`
+   (update `test_sarif_report_parses_and_schema_basics` in the same commit
+   if you assert on it)
+6. *(deferred with Windows CI)* `windows/cairn.wxs` org strings + a fresh
+   `UpgradeCode` GUID, and `windows/License.rtf` — required before
+   re-enabling the Windows jobs in ci.yml / release.yml
+
 ## 8. Day-2 things you'll want eventually
 
 In rough priority order:
