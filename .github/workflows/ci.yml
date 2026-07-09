@@ -61,6 +61,12 @@ jobs:
       fail-fast: false
       matrix:
         image: ['ubuntu:24.04', 'almalinux:10']
+        # `name` is the artifact-safe form of `image` (no ':' allowed).
+        include:
+          - image: 'ubuntu:24.04'
+            name: ubuntu-24.04
+          - image: 'almalinux:10'
+            name: almalinux-10
     container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +74,17 @@ jobs:
         with:
           name: dist-x86_64
           path: dist/
-      - run: DIST_DIR="$PWD/dist" bash scripts/smoke-test.sh
+      - run: |
+          DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" \
+            bash scripts/smoke-test.sh
+      # The captured install footprints (nginx + apache) — what cairn saw
+      # each package do. Uploaded even on failure for debugging.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footprint-${{ matrix.name }}
+          path: footprint-*.json
+          if-no-files-found: ignore
 
   # Windows builds are disabled for the Linux-only release line.
   # Re-enable: uncomment this job (and the matching one in release.yml,

@@ -131,6 +131,12 @@ jobs:
       matrix:
         image: ['ubuntu:24.04', 'almalinux:10']
         arch: [x86_64, aarch64]
+        # `name` is the artifact-safe form of `image` (no ':' allowed).
+        include:
+          - image: 'ubuntu:24.04'
+            name: ubuntu-24.04
+          - image: 'almalinux:10'
+            name: almalinux-10
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     container: ${{ matrix.image }}
     steps:
@@ -141,7 +147,17 @@ jobs:
         with:
           name: linux-${{ matrix.arch }}
           path: dist/
-      - run: DIST_DIR="$PWD/dist" bash scripts/smoke-test.sh
+      - run: |
+          DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" \
+            bash scripts/smoke-test.sh
+      # The captured install footprints (nginx + apache) — what cairn saw
+      # each package do. Uploaded even on failure for debugging.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footprint-${{ matrix.name }}-${{ matrix.arch }}
+          path: footprint-*.json
+          if-no-files-found: ignore
 
   # =========================================================================
   # 2b. Build Windows artifacts at the new version.

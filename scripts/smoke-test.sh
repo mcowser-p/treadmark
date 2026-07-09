@@ -92,15 +92,19 @@ step "baseline provenance"
 cairn baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline info broken"
 
 # ---------------------------------------------------------------------------
-# 4. Footprint capture of a real package install — the core use case.
-# Baseline → install nginx from the distro repos → `cairn footprint` must
-# surface the systemd unit, the binary, and the runs-as-root risk.
+# 4. Footprint capture of real package installs — the core use case.
+# Fresh baseline → install a package from the distro repos → `cairn
+# footprint` must surface the systemd unit, the binary, the config tree,
+# and the runs-as-root risk. Runs for nginx and Apache — Apache's package,
+# unit, binary, and config tree all differ across distro families
+# (apache2 on Debian/Ubuntu, httpd on RHEL-family), which is exactly the
+# variation worth testing.
 #
 # Uses a dedicated config: units land in /usr/lib/systemd/system, which the
 # shipped forensic default deliberately doesn't watch (this mirrors the
 # documented footprint workflow of using a footprint-tuned config).
 # ---------------------------------------------------------------------------
-step "footprint: baseline with footprint-tuned config"
+step "footprint: write footprint-tuned config"
 FP_CFG=/tmp/footprint-config.json
 cat > "$FP_CFG" <<'EOF'
 {
@@ -113,34 +117,66 @@ cat > "$FP_CFG" <<'EOF'
   "store_content_max_kb": 512
 }
 EOF
-cairn files init --config "$FP_CFG" || fail "footprint baseline init failed"
 
-step "footprint: install nginx from distro repos"
+# FOOTPRINT_DIR lets CI place the JSON models somewhere it can collect
+# them as artifacts; defaults to /tmp for local runs.
+FOOTPRINT_DIR="${FOOTPRINT_DIR:-/tmp}"
+
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -qq -y nginx >/dev/null
-else
-    dnf install -qy nginx >/dev/null
 fi
 
-step "footprint: capture and verify the install footprint"
-rc=0; cairn footprint --config "$FP_CFG" --app nginx \
-    --report /tmp/footprint.json >/tmp/footprint.out 2>&1 || rc=$?
-[ "$rc" -eq 1 ] || { cat /tmp/footprint.out; fail "footprint exited $rc, expected 1 (changes present)"; }
+# capture_footprint <app> <package> <unit> <binary> <config-tree>
+# Re-baselines first so each footprint contains only its own package,
+# then installs, captures, asserts the semantic objects, and prints the
+# summary of what the install touched.
+capture_footprint() {
+    app="$1"; pkg="$2"; unit="$3"; binary="$4"; conf="$5"
+    json="$FOOTPRINT_DIR/footprint-$app.json"
 
-grep -q '"nginx.service"' /tmp/footprint.json \
-    || fail "footprint missed the nginx systemd unit"
-grep -q '/usr/sbin/nginx' /tmp/footprint.json \
-    || fail "footprint missed the nginx binary"
-grep -q '"service_runs_as_root"' /tmp/footprint.json \
-    || fail "footprint missed the service_runs_as_root risk (nginx unit has no User=)"
-grep -q '/etc/nginx' /tmp/footprint.json \
-    || fail "footprint missed the /etc/nginx config tree"
+    step "footprint($app): fresh baseline"
+    cairn files init --config "$FP_CFG" --force >/dev/null \
+        || fail "footprint($app): baseline init failed"
 
-# Distro-dependent extras, informational only: Alma's nginx package creates
-# an 'nginx' user; Ubuntu reuses the pre-existing www-data.
-if grep -q '"name": "nginx"' /tmp/footprint.json; then
-    step "footprint: nginx service account creation captured (users_added)"
+    step "footprint($app): install $pkg from distro repos"
+    if command -v apt-get >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$pkg" >/dev/null
+    else
+        dnf install -qy "$pkg" >/dev/null
+    fi
+
+    step "footprint($app): capture and verify"
+    rc=0; cairn footprint --config "$FP_CFG" --app "$app" \
+        --report "$json" >"/tmp/footprint-$app.out" 2>&1 || rc=$?
+    [ "$rc" -eq 1 ] || { cat "/tmp/footprint-$app.out";
+        fail "footprint($app) exited $rc, expected 1 (changes present)"; }
+
+    grep -q "\"$unit\"" "$json" \
+        || fail "footprint($app) missed the $unit systemd unit"
+    grep -q "$binary" "$json" \
+        || fail "footprint($app) missed the $binary binary"
+    grep -q '"service_runs_as_root"' "$json" \
+        || fail "footprint($app) missed the service_runs_as_root risk ($unit has no User=)"
+    grep -q "$conf" "$json" \
+        || fail "footprint($app) missed the $conf config tree"
+
+    # Show what the install actually did — the whole point of the exercise.
+    step "footprint($app): what the install touched"
+    cat "/tmp/footprint-$app.out"
+    echo "    (full model: $json)"
+
+    # Informational: some packages create their service account (Alma's
+    # nginx/httpd), others reuse a pre-existing one (Ubuntu's www-data).
+    if ! grep -q '"users_added": \[\]' "$json"; then
+        step "footprint($app): service account creation captured (users_added)"
+    fi
+}
+
+capture_footprint nginx nginx nginx.service /usr/sbin/nginx /etc/nginx
+if command -v apt-get >/dev/null 2>&1; then
+    capture_footprint apache apache2 apache2.service /usr/sbin/apache2 /etc/apache2
+else
+    capture_footprint apache httpd httpd.service /usr/sbin/httpd /etc/httpd
 fi
 
 # ---------------------------------------------------------------------------
