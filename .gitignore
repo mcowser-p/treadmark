@@ -63,4 +63,6 @@ secrets/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
-smoke-out/
+# smoke-out/ holds locally captured footprint models — keep the dir, never its contents
+smoke-out/*
+!smoke-out/.gitkeep
