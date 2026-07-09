@@ -212,6 +212,19 @@ capture_footprint() {
     cairn files init --config "$FP_CFG" --force >/dev/null 2>&1 \
         || fail "footprint($app): baseline init failed"
 
+    # A package can arrive early as a dependency of a previous capture
+    # (e.g. Ubuntu's postgresql pulls in cron) — its own install would then
+    # be a no-op with an empty footprint. Skip loudly instead of failing.
+    if command -v apt-get >/dev/null 2>&1; then
+        if dpkg -s "$pkg" >/dev/null 2>&1; then
+            step "footprint($app): $pkg already present (dependency of an earlier capture) — skipped"
+            return 0
+        fi
+    elif rpm -q "$pkg" >/dev/null 2>&1; then
+        step "footprint($app): $pkg already present (dependency of an earlier capture) — skipped"
+        return 0
+    fi
+
     step "footprint($app): install $pkg from distro repos"
     if command -v apt-get >/dev/null 2>&1; then
         DEBIAN_FRONTEND=noninteractive apt-get install -qq -y "$pkg" >/dev/null
@@ -285,6 +298,72 @@ else
         '"postgresql.service"' '"name": "postgres"' '"user": "postgres"'
     capture_footprint valkey valkey \
         '"valkey.service"' '/usr/bin/valkey-server' '/etc/valkey'
+fi
+
+# ---------------------------------------------------------------------------
+# 4b. Extended footprint set: enterprise agents and developer toolchains.
+# SMOKE_EXTENDED=1 enables it (local runs and the release pipeline);
+# PR CI runs only the core set above to stay fast.
+#
+# Not covered on purpose: Grafana Alloy, telegraf, filebeat, zabbix
+# (vendor repos only — this suite tests default-repo packages);
+# open-vm-tools (x86-oriented, spotty on aarch64 repos); fail2ban on
+# RHEL-family (EPEL-only there).
+# ---------------------------------------------------------------------------
+if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
+    if command -v apt-get >/dev/null 2>&1; then
+        # --- enterprise agents (Debian/Ubuntu) ---
+        capture_footprint sssd sssd \
+            '"sssd.service"' '/etc/sssd' '"pam_modified"'
+        capture_footprint auditd auditd \
+            '"auditd.service"' '/etc/audit'
+        capture_footprint fail2ban fail2ban \
+            '"fail2ban.service"' '/etc/fail2ban'
+        capture_footprint postfix postfix \
+            '"postfix.service"' '/etc/postfix' '"setgid_binary"' '"name": "postfix"'
+        capture_footprint chrony chrony \
+            '"chrony.service"' '/etc/chrony'
+        capture_footprint cron cron \
+            '"cron.service"' '/etc/cron'
+        capture_footprint nfs nfs-common \
+            '"rpc-statd.service"' '/usr/sbin/rpc.statd'
+        capture_footprint autofs autofs \
+            '"autofs.service"' '/etc/auto'
+        capture_footprint snmpd snmpd \
+            '"snmpd.service"' '/etc/snmp'
+        capture_footprint qemu-guest-agent qemu-guest-agent \
+            '"qemu-guest-agent.service"' 'qemu-ga'
+        # --- developer toolchains (no units — binaries + /etc integration) ---
+        capture_footprint pip python3-pip '/usr/bin/pip3'
+        capture_footprint java default-jre-headless '/usr/bin/java' '/etc/alternatives'
+        capture_footprint nodejs nodejs '/usr/bin/node'
+        capture_footprint git git '/usr/bin/git'
+    else
+        # --- enterprise agents (RHEL family) ---
+        capture_footprint sssd sssd \
+            '"sssd.service"' '/etc/sssd'
+        capture_footprint auditd audit \
+            '"auditd.service"' '/etc/audit'
+        capture_footprint postfix postfix \
+            '"postfix.service"' '/etc/postfix' '"setgid_binary"' '"name": "postfix"'
+        capture_footprint chrony chrony \
+            '"chronyd.service"' '/etc/chrony'
+        capture_footprint cron cronie \
+            '"crond.service"' '/etc/cron'
+        capture_footprint nfs nfs-utils \
+            '"rpc-statd.service"' '/usr/sbin/rpc.statd'
+        capture_footprint autofs autofs \
+            '"autofs.service"' '/etc/auto'
+        capture_footprint snmpd net-snmp \
+            '"snmpd.service"' '/etc/snmp'
+        capture_footprint qemu-guest-agent qemu-guest-agent \
+            '"qemu-guest-agent.service"' 'qemu-ga'
+        # --- developer toolchains ---
+        capture_footprint pip python3-pip '/usr/bin/pip3'
+        capture_footprint java java-21-openjdk-headless '/usr/bin/java' '/etc/alternatives'
+        capture_footprint nodejs nodejs '/usr/bin/node'
+        capture_footprint git git '/usr/bin/git'
+    fi
 fi
 
 # ---------------------------------------------------------------------------

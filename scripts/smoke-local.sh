@@ -73,6 +73,7 @@ for image in $SMOKE_IMAGES; do
         -v "$outdir":/smoke-out \
         -e FOOTPRINT_DIR=/smoke-out \
         -e SMOKE_DEBUG="${SMOKE_DEBUG:-0}" \
+        -e SMOKE_EXTENDED="${SMOKE_EXTENDED:-1}" \
         "$image" bash /smoke-test.sh; then
         passed+=("$image")
     else

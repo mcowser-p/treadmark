@@ -148,7 +148,9 @@ jobs:
           name: linux-${{ matrix.arch }}
           path: dist/
       - run: |
-          DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" \
+          # SMOKE_EXTENDED: releases run the full enterprise/dev package
+          # set; PR CI runs only the core web/db set for speed.
+          DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" SMOKE_EXTENDED=1 \
             bash scripts/smoke-test.sh
       # The captured install footprints (nginx + apache) — what cairn saw
       # each package do. Uploaded even on failure for debugging.

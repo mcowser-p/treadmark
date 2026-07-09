@@ -47,6 +47,7 @@ for tpl in packaging/lima/*.yaml; do
     limactl start --name "$name" --tty=false "$tpl"
 
     if limactl shell "$name" sudo DIST_DIR="$REPO/dist" \
+            SMOKE_EXTENDED="${SMOKE_EXTENDED:-1}" \
             bash "$REPO/scripts/smoke-test.sh"; then
         passed+=("$distro")
         if [ "$KEEP" = "--keep" ]; then
