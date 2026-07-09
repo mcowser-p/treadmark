@@ -55,16 +55,21 @@ CID=$("$RUNTIME" create "$IMAGE" /bin/true 2>/dev/null || "$RUNTIME" create "$IM
 trap '"$RUNTIME" rm -f "$CID" >/dev/null 2>&1 || true' EXIT
 
 echo ">>> exporting filesystem to $DEST"
-# --same-owner preserves uid/gid so cairn's ownership attribution is correct.
-# Requires root; without it every file lands owned by the extracting user and
-# the file-owner access hints become meaningless.
-if [ "$(id -u)" -ne 0 ]; then
+# --same-owner/--preserve-permissions keep uid/gid and setuid bits, which
+# cairn's ownership attribution and setuid detection depend on. That needs
+# root. Without root we extract explicitly degraded (--no-same-owner) and say
+# so loudly. No silent fallback: a genuine extraction failure (disk full,
+# corrupt stream) must fail the script, not masquerade as a degraded success.
+# (`cairn footprint --root` independently detects degraded trees and stamps
+# `fidelity: degraded` into the report.)
+if [ "$(id -u)" -eq 0 ]; then
+    "$RUNTIME" export "$CID" | tar -x -C "$DEST" --same-owner --preserve-permissions
+else
     echo "[!] not running as root: uid/gid and setuid bits will NOT be preserved." >&2
     echo "    File-ownership hints and setuid risk detection will be wrong." >&2
     echo "    Re-run with sudo for a faithful extraction." >&2
+    "$RUNTIME" export "$CID" | tar -x -C "$DEST" --no-same-owner
 fi
-"$RUNTIME" export "$CID" | tar -x -C "$DEST" --same-owner --preserve-permissions 2>/dev/null \
-    || "$RUNTIME" export "$CID" | tar -x -C "$DEST"
 
 echo ">>> capturing image metadata (ENTRYPOINT/CMD/USER/ENV/ports)"
 "$RUNTIME" image inspect "$IMAGE" > "${DEST%/}.inspect.json" 2>/dev/null \
