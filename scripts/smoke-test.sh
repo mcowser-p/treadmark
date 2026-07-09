@@ -77,8 +77,13 @@ grep -q '/etc/hosts' /tmp/smoke.json \
     || fail "/etc/hosts edit not reported — is the exclude list too aggressive?"
 
 step "accept the drift, rescan expects exit 0"
+# Accept the two changed files AND the /etc directory record itself:
+# planting a file updates the parent dir's mtime, and if init and the
+# plant straddle an integer second, the dir shows as modified too.
+# (--accept on a directory covers everything beneath it.)
 rc=0; cairn files update --config "$CFG" \
-    --accept /etc/cairn-smoke-drift.conf --accept /etc/hosts >/dev/null 2>&1 || rc=$?
+    --accept /etc/cairn-smoke-drift.conf --accept /etc/hosts \
+    --accept /etc >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "update run exited $rc (expected 1: it reports the drift it accepts)"
 rc=0; cairn files scan --config "$CFG" >/tmp/scan-after.out 2>&1 || rc=$?
 [ "$rc" -eq 0 ] || { cat /tmp/scan-after.out; fail "post-accept scan exited $rc"; }
@@ -87,7 +92,59 @@ step "baseline provenance"
 cairn baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline info broken"
 
 # ---------------------------------------------------------------------------
-# 4. Context notes (VMs only — containers have no SELinux of their own)
+# 4. Footprint capture of a real package install — the core use case.
+# Baseline → install nginx from the distro repos → `cairn footprint` must
+# surface the systemd unit, the binary, and the runs-as-root risk.
+#
+# Uses a dedicated config: units land in /usr/lib/systemd/system, which the
+# shipped forensic default deliberately doesn't watch (this mirrors the
+# documented footprint workflow of using a footprint-tuned config).
+# ---------------------------------------------------------------------------
+step "footprint: baseline with footprint-tuned config"
+FP_CFG=/tmp/footprint-config.json
+cat > "$FP_CFG" <<'EOF'
+{
+  "db_path": "/var/lib/cairn/footprint-baseline.db",
+  "paths": ["/etc", "/usr/bin", "/usr/sbin", "/usr/lib/systemd/system",
+            "/var/spool/cron"],
+  "exclude": ["/etc/ld.so.cache", "/etc/mtab", "/etc/resolv.conf",
+              "/etc/adjtime", "/etc/.pwd.lock"],
+  "store_content": true,
+  "store_content_max_kb": 512
+}
+EOF
+cairn files init --config "$FP_CFG" || fail "footprint baseline init failed"
+
+step "footprint: install nginx from distro repos"
+if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -qq -y nginx >/dev/null
+else
+    dnf install -qy nginx >/dev/null
+fi
+
+step "footprint: capture and verify the install footprint"
+rc=0; cairn footprint --config "$FP_CFG" --app nginx \
+    --report /tmp/footprint.json >/tmp/footprint.out 2>&1 || rc=$?
+[ "$rc" -eq 1 ] || { cat /tmp/footprint.out; fail "footprint exited $rc, expected 1 (changes present)"; }
+
+grep -q '"nginx.service"' /tmp/footprint.json \
+    || fail "footprint missed the nginx systemd unit"
+grep -q '/usr/sbin/nginx' /tmp/footprint.json \
+    || fail "footprint missed the nginx binary"
+grep -q '"service_runs_as_root"' /tmp/footprint.json \
+    || fail "footprint missed the service_runs_as_root risk (nginx unit has no User=)"
+grep -q '/etc/nginx' /tmp/footprint.json \
+    || fail "footprint missed the /etc/nginx config tree"
+
+# Distro-dependent extras, informational only: Alma's nginx package creates
+# an 'nginx' user; Ubuntu reuses the pre-existing www-data.
+if grep -q '"name": "nginx"' /tmp/footprint.json; then
+    step "footprint: nginx service account creation captured (users_added)"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. Context notes (VMs only — containers have no SELinux of their own)
 # ---------------------------------------------------------------------------
 if command -v getenforce >/dev/null 2>&1; then
     step "SELinux: $(getenforce)"
