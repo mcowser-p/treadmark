@@ -333,6 +333,8 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
             '"snmpd.service"' '/etc/snmp'
         capture_footprint qemu-guest-agent qemu-guest-agent \
             '"qemu-guest-agent.service"' 'qemu-ga'
+        capture_footprint podman podman \
+            '"podman.socket"' '/usr/bin/podman' '/etc/containers'
         # --- developer toolchains (no units — binaries + /etc integration) ---
         capture_footprint pip python3-pip '/usr/bin/pip3'
         capture_footprint java default-jre-headless '/usr/bin/java' '/etc/alternatives'
@@ -358,6 +360,8 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
             '"snmpd.service"' '/etc/snmp'
         capture_footprint qemu-guest-agent qemu-guest-agent \
             '"qemu-guest-agent.service"' 'qemu-ga'
+        capture_footprint podman podman \
+            '"podman.socket"' '/usr/bin/podman' '/etc/containers'
         # --- developer toolchains ---
         capture_footprint pip python3-pip '/usr/bin/pip3'
         capture_footprint java java-21-openjdk-headless '/usr/bin/java' '/etc/alternatives'
