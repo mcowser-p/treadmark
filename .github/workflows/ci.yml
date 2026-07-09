@@ -44,14 +44,17 @@ jobs:
       - run: bash scripts/build-linux.sh
       - run: ls -lh dist/
 
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - shell: pwsh
-        run: scripts\build-windows.ps1
-      - shell: pwsh
-        run: Get-ChildItem dist
+  # Windows builds are disabled for the Linux-only release line.
+  # Re-enable: uncomment this job (and the matching one in release.yml,
+  # plus restore 'windows' in release.yml's attach.needs).
+  # windows:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.12'
+  #     - shell: pwsh
+  #       run: scripts\build-windows.ps1
+  #     - shell: pwsh
+  #       run: Get-ChildItem dist

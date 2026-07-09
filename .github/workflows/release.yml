@@ -120,37 +120,43 @@ jobs:
 
   # =========================================================================
   # 2b. Build Windows artifacts at the new version.
+  #
+  # DISABLED for the Linux-only release line. Re-enable: uncomment this job,
+  # restore 'windows' in the attach job's needs below, and uncomment the
+  # windows job in ci.yml. Before shipping Windows artifacts, also complete
+  # the Windows items in SETUP.md (org strings + fresh UpgradeCode GUID in
+  # windows/cairn.wxs, License.rtf).
   # =========================================================================
-  windows:
-    needs: release
-    if: needs.release.outputs.released == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.tag }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: build binary + msi
-        shell: pwsh
-        run: scripts\build-windows.ps1
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x86_64
-          path: |
-            dist/cairn-windows-x86_64.exe
-            dist/*.msi
-          if-no-files-found: error
+  # windows:
+  #   needs: release
+  #   if: needs.release.outputs.released == 'true'
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ needs.release.outputs.tag }}
+  #
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.12'
+  #
+  #     - name: build binary + msi
+  #       shell: pwsh
+  #       run: scripts\build-windows.ps1
+  #
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: windows-x86_64
+  #         path: |
+  #           dist/cairn-windows-x86_64.exe
+  #           dist/*.msi
+  #         if-no-files-found: error
 
   # =========================================================================
   # 3. Attach all artifacts to the GitHub Release semantic-release created.
   # =========================================================================
   attach:
-    needs: [release, linux, windows]
+    needs: [release, linux]   # re-add 'windows' when Windows builds return
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
