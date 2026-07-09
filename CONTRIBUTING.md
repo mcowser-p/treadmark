@@ -90,6 +90,10 @@ pytest
 # Make sure the package still builds
 bash scripts/build-linux.sh
 
+# Optional: install + exercise the built .deb/.rpm on real target distros
+# (ubuntu:24.04, almalinux:10 — needs docker or podman; works on macOS)
+bash scripts/smoke-local.sh
+
 # Enable commit-message enforcement once per clone
 # (scripts/bootstrap.sh does this automatically)
 git config core.hooksPath .githooks
