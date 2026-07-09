@@ -29,6 +29,7 @@ yaml    = ["PyYAML>=6.0"]
 windows = ["pywin32>=305; sys_platform == 'win32'"]
 all     = ["PyYAML>=6.0", "pywin32>=305; sys_platform == 'win32'"]
 build   = ["pyinstaller>=6.0"]
+dev     = ["pytest>=7.4", "PyYAML>=6.0"]
 
 [project.scripts]
 cairn = "cairn.__main__:main"
@@ -38,6 +39,10 @@ Homepage = "https://example.com/cairn"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cairn"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 # ---------------------------------------------------------------------------
 # python-semantic-release configuration
