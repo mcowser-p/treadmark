@@ -53,16 +53,25 @@ ls -lh dist/cairn_*.deb dist/cairn-*.rpm
 
 # ---------------------------------------------------------------------------
 # Stage 2: run the smoke test inside each target distro.
+#
+# Captured footprint JSONs persist under smoke-out/<distro>/ on the host
+# for post-run inspection. SMOKE_DEBUG=1 (the local default) additionally
+# dumps each full model into the log; set SMOKE_DEBUG=0 to quieten.
 # ---------------------------------------------------------------------------
 declare -a passed=() failed=()
 for image in $SMOKE_IMAGES; do
+    outdir="$REPO/smoke-out/$(echo "$image" | tr ':/' '--')"
+    mkdir -p "$outdir"
     echo ""
     echo "=============================================================="
-    echo ">>> smoke: $image"
+    echo ">>> smoke: $image   (footprints → ${outdir#"$REPO"/})"
     echo "=============================================================="
     if "$RUNTIME" run --rm \
         -v "$REPO/dist":/dist:ro \
         -v "$REPO/scripts/smoke-test.sh":/smoke-test.sh:ro \
+        -v "$outdir":/smoke-out \
+        -e FOOTPRINT_DIR=/smoke-out \
+        -e SMOKE_DEBUG="${SMOKE_DEBUG:-1}" \
         "$image" bash /smoke-test.sh; then
         passed+=("$image")
     else

@@ -165,6 +165,13 @@ capture_footprint() {
     cat "/tmp/footprint-$app.out"
     echo "    (full model: $json)"
 
+    # SMOKE_DEBUG=1 dumps the entire JSON model into the log — verbose,
+    # but invaluable when a grep assertion above starts failing.
+    if [ "${SMOKE_DEBUG:-0}" = "1" ]; then
+        step "footprint($app): full model (SMOKE_DEBUG=1)"
+        cat "$json"
+    fi
+
     # Informational: some packages create their service account (Alma's
     # nginx/httpd), others reuse a pre-existing one (Ubuntu's www-data).
     if ! grep -q '"users_added": \[\]' "$json"; then
