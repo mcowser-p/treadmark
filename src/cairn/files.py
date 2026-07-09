@@ -111,6 +111,11 @@ class FileRecord:
     # for text files under `store_content_max_kb` size, controlled by config.
     # Lets `cairn files scan` show line-level diffs for changed config files.
     content_gz: Optional[bytes] = None
+    # The path as it exists on the scanning machine. Differs from `path` only
+    # when root_prefix is set (mounted image, container rootfs, chroot).
+    # NEVER persisted: the DB stores logical paths, so a baseline captured from
+    # one rootfs can be diffed against a different rootfs.
+    real_path: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +258,13 @@ def get_acl(path: str) -> Optional[str]:
 
 
 def stat_file(path: str, cfg: dict) -> FileRecord:
-    """Build a FileRecord for a single path."""
+    """Build a FileRecord for a single path.
+
+    `path` is the real path on the scanning machine. The resulting record's
+    `.path` is the logical path inside the target root (identical unless
+    root_prefix is set); `.real_path` retains the scannable location.
+    """
+    root_prefix = get_root_prefix(cfg)
     follow = cfg.get("follow_symlinks", False)
     st = os.stat(path, follow_symlinks=follow)
     is_dir = stat.S_ISDIR(st.st_mode)
@@ -281,8 +292,10 @@ def stat_file(path: str, cfg: dict) -> FileRecord:
         if st.st_size <= max_content_kb * 1024:
             content_gz = capture_content_if_text(path, max_content_kb * 1024)
 
+    real = os.path.abspath(path)
     return FileRecord(
-        path=os.path.abspath(path),
+        path=to_logical(real, root_prefix),
+        real_path=real,
         size=st.st_size,
         mtime=st.st_mtime,
         ctime=st.st_ctime,
@@ -301,7 +314,40 @@ def stat_file(path: str, cfg: dict) -> FileRecord:
     )
 
 
+def get_root_prefix(cfg: dict) -> str:
+    """Normalized root_prefix from config, or "" for a live host scan."""
+    rp = (cfg.get("root_prefix") or "").strip()
+    if not rp or rp == "/":
+        return ""
+    return os.path.abspath(os.path.expanduser(rp)).rstrip("/")
+
+
+def to_logical(path: str, root_prefix: str) -> str:
+    """Real scanned path -> the path as it exists inside the target root.
+
+    /mnt/image/etc/passwd with root_prefix=/mnt/image  ->  /etc/passwd
+    Live-host scans (root_prefix="") pass through unchanged.
+    """
+    if not root_prefix:
+        return path
+    if path == root_prefix:
+        return "/"
+    if path.startswith(root_prefix + os.sep) or path.startswith(root_prefix + "/"):
+        return path[len(root_prefix):]
+    return path
+
+
+def to_real(logical: str, root_prefix: str) -> str:
+    """Inverse of to_logical: the path to actually open on this machine."""
+    if not root_prefix:
+        return logical
+    return root_prefix + logical if logical.startswith("/") else os.path.join(root_prefix, logical)
+
+
 def should_skip(path: str, cfg: dict) -> bool:
+    # Exclude patterns are written against logical paths (/var/cache/, /etc/mtab)
+    # so one config works for a live host and for a mounted image alike.
+    path = to_logical(path, get_root_prefix(cfg))
     norm = path.replace("\\", "/")
     for pat in cfg.get("exclude", []):
         if pat in norm:
@@ -351,9 +397,17 @@ def load_accept_file(path: str) -> list[str]:
 
 
 def walk_paths(cfg: dict) -> Iterator[str]:
+    """Yield real paths to scan.
+
+    `paths:` entries are logical (as they appear inside the target root). When
+    root_prefix is set they are joined onto it, so the same config scans a live
+    host, a mounted disk image, or an extracted container rootfs unchanged.
+    """
     follow = cfg.get("follow_symlinks", False)
+    root_prefix = get_root_prefix(cfg)
     for root in cfg.get("paths", []):
         root = os.path.expanduser(os.path.expandvars(root))
+        root = to_real(root, root_prefix)
         if not os.path.exists(root):
             print(f"[!] path missing, skipping: {root}", file=sys.stderr)
             continue

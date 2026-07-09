@@ -2,6 +2,19 @@
 
 All notable changes to cairn are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After the initial release, entries below this line are appended automatically by `python-semantic-release` from conventional commit messages — don't edit them by hand.
 
+## [Unreleased]
+
+### Features
+
+- `cairn footprint` — capture an application's install-time footprint as a structured JSON model for least-privilege policy generation. Parses systemd units (identity, exec, capabilities, hardening, directory directives), cron jobs, `/etc/passwd` and `/etc/group` diffs including membership changes on existing groups, sudoers rules, setuid/setgid binaries, and file capabilities. Emits per-principal `access_hints` with provenance, and severity-ranked `risks`.
+- `--root DIR` on `cairn files` and `cairn footprint` — treat DIR as `/` when scanning a mounted disk image, extracted container rootfs, or chroot. Baselines store logical paths, so a baseline captured from one rootfs can be diffed against another.
+- `scripts/container-rootfs.sh` — extract a container image's flattened filesystem plus its image metadata for footprinting.
+- `packaging/cairn-footprint-linux.yaml` — config tuned for install-footprint capture, with aggressive exclusion of package-manager bookkeeping, caches, and host-specific files.
+
+### Documentation
+
+- `docs/footprint-workflow.md` — footprint workflow, container and disk-image scanning, output schema, and the install-time vs. runtime limitation.
+
 ## [0.2.0] — 2026-05-17
 
 Initial release.

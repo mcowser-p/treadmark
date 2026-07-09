@@ -1,0 +1,562 @@
+"""cairn.footprint — build an install-time footprint model for an application.
+
+Workflow this supports:
+
+    1. Baseline a clean OS image        cairn files init --config clean.yaml
+    2. Hand the box to a developer; they install their application
+    3. Capture the footprint             cairn footprint --config clean.yaml \
+                                            --report footprint.json
+
+The output is a structured description of everything the install touched,
+with the security-relevant objects parsed into first-class form: systemd
+units (and the identity they run as), cron jobs, users and groups created,
+group memberships granted, sudoers rules, setuid binaries, and file
+capabilities.
+
+The intended consumer is an agent that derives a least-privilege access
+model. The schema is designed so that runtime-observed access data (eBPF,
+auditd, strace) can be merged in later under a separate `runtime` key —
+the `footprint_type` field marks this document as install-time only.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import platform
+import sys
+from dataclasses import asdict
+from datetime import datetime, timezone
+from typing import Optional
+
+from . import files as files_mod
+from . import semantic as sem
+
+
+# ---------------------------------------------------------------------------
+# Collection
+# ---------------------------------------------------------------------------
+
+def _content_of(rec) -> Optional[str]:
+    """Decompress stored content from a FileRecord, if any."""
+    return files_mod.decompress_content(getattr(rec, "content_gz", None))
+
+
+def _live_content(path: str, max_bytes: int = 1024 * 1024) -> Optional[str]:
+    """Read a file from the live filesystem. Used when the baseline has no
+    stored content (e.g. store_content was off, or the file is new)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(max_bytes)
+        return data.decode("utf-8", errors="replace")
+    except (OSError, PermissionError):
+        return None
+
+
+def _collect_changes(cfg: dict) -> tuple[list, list, list, list[str]]:
+    """Walk the filesystem and diff against the baseline.
+
+    Returns (added, modified, deleted, errors) where modified is a list of
+    (old_record, new_record, change_list) tuples. This mirrors cmd_scan's
+    collection phase but does not emit reports or touch the baseline.
+    """
+    db_path = cfg["db_path"]
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"no baseline at {db_path}; run `cairn files init` first")
+
+    conn = files_mod.open_db(db_path)
+    try:
+        baseline = files_mod.load_baseline(conn)
+    finally:
+        conn.close()
+
+    seen: set[str] = set()
+    added, modified, errors = [], [], []
+
+    for fp in files_mod.walk_paths(cfg):
+        try:
+            rec = files_mod.stat_file(fp, cfg)
+        except (OSError, PermissionError) as e:
+            errors.append(f"skip {fp}: {e}")
+            continue
+        seen.add(rec.path)
+        old = baseline.get(rec.path)
+        if old is None:
+            added.append(rec)
+            continue
+        diffs = files_mod.diff_records(old, rec, cfg)
+        if diffs:
+            modified.append((old, rec, diffs))
+
+    deleted_paths = sorted(set(baseline.keys()) - seen)
+    deleted = [baseline[p] for p in deleted_paths]
+    return added, modified, deleted, errors
+
+
+# ---------------------------------------------------------------------------
+# Semantic extraction
+# ---------------------------------------------------------------------------
+
+def _extract(added: list, modified: list) -> dict:
+    """Pull parsed security objects out of the raw change lists."""
+    systemd_units: list[sem.SystemdUnit] = []
+    cron_jobs: list[sem.CronJob] = []
+    sudo_rules: list[sem.SudoRule] = []
+    users_added: list[sem.UserEntry] = []
+    groups_added: list[sem.GroupEntry] = []
+    membership_changes: list[sem.GroupMembershipChange] = []
+    pam_files: list[str] = []
+    security_files: list[dict] = []   # polkit, dbus, sysctl, udev, caps, limits...
+
+    # --- New files: parse from live content (or stored content if present) ---
+    for rec in added:
+        cat = sem.classify_path(rec.path)
+        content = _content_of(rec) or _live_content(rec.real_path or rec.path)
+
+        if cat in ("systemd_unit", "systemd_dropin") and content:
+            systemd_units.append(sem.parse_systemd_unit(rec.path, content))
+        elif cat == "cron_d" and content:
+            cron_jobs.extend(sem.parse_cron(rec.path, content, "cron_d"))
+        elif cat == "crontab_user" and content:
+            cron_jobs.extend(sem.parse_cron(rec.path, content, "crontab_user"))
+        elif cat == "cron_periodic":
+            # These are scripts, not crontab lines. Schedule is implied by dir.
+            logical = rec.path
+            period = logical.split("/")[2].replace("cron.", "")
+            cron_jobs.append(sem.CronJob(
+                source_path=rec.path, kind="cron_periodic",
+                schedule=f"@{period}", run_as="root", command=rec.path))
+        elif cat == "sudoers" and content:
+            sudo_rules.extend(sem.parse_sudoers(rec.path, content))
+        elif cat == "pam":
+            pam_files.append(rec.path)
+        elif cat == "group" and content:
+            g, m = sem.diff_group(None, content)
+            groups_added.extend(g)
+            membership_changes.extend(m)
+        elif cat == "passwd" and content:
+            users_added.extend(sem.diff_passwd(None, content))
+        elif cat in ("polkit", "dbus_policy", "sysctl", "udev_rule", "ld_so_conf",
+                     "profile_d", "limits_d", "apparmor", "selinux", "modprobe",
+                     "tmpfiles", "sysusers", "init_script", "nsswitch",
+                     "pam_security", "logrotate"):
+            security_files.append({"path": rec.path, "category": cat, "change": "added"})
+
+    # --- Modified files: diff old vs new content where semantics require it ---
+    for old, new, _changes in modified:
+        cat = sem.classify_path(new.path)
+        old_content = _content_of(old)
+        new_content = _content_of(new) or _live_content(new.real_path or new.path)
+
+        if cat == "passwd" and new_content:
+            users_added.extend(sem.diff_passwd(old_content, new_content))
+        elif cat == "group" and new_content:
+            g, m = sem.diff_group(old_content, new_content)
+            groups_added.extend(g)
+            membership_changes.extend(m)
+        elif cat == "sudoers" and new_content:
+            sudo_rules.extend(sem.parse_sudoers(new.path, new_content))
+        elif cat in ("systemd_unit", "systemd_dropin") and new_content:
+            systemd_units.append(sem.parse_systemd_unit(new.path, new_content))
+        elif cat in ("cron_d", "crontab_system") and new_content:
+            cron_jobs.extend(sem.parse_cron(new.path, new_content, cat))
+        elif cat == "crontab_user" and new_content:
+            cron_jobs.extend(sem.parse_cron(new.path, new_content, "crontab_user"))
+        elif cat == "pam":
+            pam_files.append(new.path)
+        elif cat in ("polkit", "dbus_policy", "sysctl", "udev_rule", "ld_so_conf",
+                     "profile_d", "limits_d", "apparmor", "selinux", "modprobe",
+                     "tmpfiles", "sysusers", "init_script", "nsswitch",
+                     "pam_security", "logrotate"):
+            security_files.append({"path": new.path, "category": cat, "change": "modified"})
+
+    return {
+        "systemd_units": systemd_units,
+        "cron_jobs": cron_jobs,
+        "sudo_rules": sudo_rules,
+        "users_added": users_added,
+        "groups_added": groups_added,
+        "membership_changes": membership_changes,
+        "pam_files": sorted(set(pam_files)),
+        "security_files": security_files,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Derived access hints — the part the agent actually wants
+# ---------------------------------------------------------------------------
+
+def _dedupe_needs(needs: list[dict]) -> list[dict]:
+    """Collapse duplicate paths, unioning their access levels and sources.
+
+    A path can be implied by several directives (e.g. ConfigurationDirectory
+    and ReadOnlyPaths both point at /etc/myapp). The agent wants one entry per
+    path with the widest access any source justified, and the provenance of
+    why.
+    """
+    merged: dict[str, dict] = {}
+    for n in needs:
+        path = n["path"]
+        if not path:
+            continue
+        if path not in merged:
+            merged[path] = {"path": path,
+                            "access": set(n["access"].split(",")),
+                            "sources": [n["source"]]}
+        else:
+            merged[path]["access"].update(n["access"].split(","))
+            if n["source"] not in merged[path]["sources"]:
+                merged[path]["sources"].append(n["source"])
+    out = []
+    for path in sorted(merged):
+        m = merged[path]
+        # Stable ordering: read, write, execute
+        order = [a for a in ("read", "write", "execute") if a in m["access"]]
+        out.append({"path": path, "access": ",".join(order), "sources": m["sources"]})
+    return out
+
+
+def _derive_access_hints(extracted: dict, added: list, modified: list) -> list[dict]:
+    """For each service identity the install introduced, gather the paths it
+    plausibly needs and at what access level.
+
+    These are *hints*, not a policy. They are derived from declared intent
+    (systemd directives) and from file ownership, both of which are install-time
+    signals. A real policy needs runtime observation to confirm and to catch
+    paths nothing declared.
+    """
+    # Index installed files by owner and by group so we can attribute them.
+    by_owner: dict[str, list[str]] = {}
+    by_group: dict[str, list[str]] = {}
+    all_records = list(added) + [n for (_o, n, _c) in modified]
+    for rec in all_records:
+        logical = rec.path
+        if rec.owner:
+            by_owner.setdefault(rec.owner, []).append(logical)
+        if rec.group:
+            by_group.setdefault(rec.group, []).append(logical)
+
+    hints: list[dict] = []
+
+    for unit in extracted["systemd_units"]:
+        # Only units that actually run something are principals. Timers,
+        # targets, and sockets carry no identity of their own — the service
+        # they activate does.
+        if not (unit.exec_start or unit.exec_start_pre or unit.user):
+            continue
+
+        principal = unit.user or "root"
+        needs: list[dict] = []
+
+        for e in unit.exec_start + unit.exec_start_pre + unit.exec_stop:
+            binary = sem.systemd_exec_binary(e)
+            if binary and binary.startswith("/"):
+                needs.append({"path": binary, "access": "read,execute",
+                              "source": "systemd:ExecStart"})
+
+        if unit.working_directory:
+            needs.append({"path": unit.working_directory, "access": "read",
+                          "source": "systemd:WorkingDirectory"})
+        for ef in unit.environment_files:
+            needs.append({"path": ef.lstrip("-"), "access": "read",
+                          "source": "systemd:EnvironmentFile"})
+        for p in unit.read_write_paths:
+            needs.append({"path": p, "access": "read,write",
+                          "source": "systemd:ReadWritePaths"})
+        for p in unit.read_only_paths:
+            needs.append({"path": p, "access": "read",
+                          "source": "systemd:ReadOnlyPaths"})
+        # systemd's *Directory= directives are relative names under a known root
+        for d in unit.state_directory:
+            needs.append({"path": f"/var/lib/{d}", "access": "read,write",
+                          "source": "systemd:StateDirectory"})
+        for d in unit.cache_directory:
+            needs.append({"path": f"/var/cache/{d}", "access": "read,write",
+                          "source": "systemd:CacheDirectory"})
+        for d in unit.logs_directory:
+            needs.append({"path": f"/var/log/{d}", "access": "read,write",
+                          "source": "systemd:LogsDirectory"})
+        for d in unit.runtime_directory:
+            needs.append({"path": f"/run/{d}", "access": "read,write",
+                          "source": "systemd:RuntimeDirectory"})
+        for d in unit.configuration_directory:
+            needs.append({"path": f"/etc/{d}", "access": "read",
+                          "source": "systemd:ConfigurationDirectory"})
+
+        # Files the installer chowned to this principal are strong evidence.
+        # Skip root: root owns everything by default, so "root owns this file"
+        # carries no information about what the service actually needs.
+        if principal != "root":
+            for p in sorted(by_owner.get(principal, []))[:500]:
+                needs.append({"path": p, "access": "read,write",
+                              "source": "file-owner"})
+        if unit.group and unit.group != "root":
+            for p in sorted(by_group.get(unit.group, []))[:500]:
+                needs.append({"path": p, "access": "read",
+                              "source": "file-group"})
+
+        needs = _dedupe_needs(needs)
+
+        hints.append({
+            "principal": principal,
+            "principal_type": "systemd_service",
+            "unit": unit.name,
+            "supplementary_groups": unit.supplementary_groups,
+            "declared_capabilities": unit.ambient_capabilities or unit.capabilities,
+            "hardening": {
+                "private_tmp": unit.private_tmp,
+                "protect_system": unit.protect_system,
+                "protect_home": unit.protect_home,
+                "no_new_privileges": unit.no_new_privileges,
+            },
+            "needs": needs,
+        })
+
+    # Cron jobs introduce principals too
+    for job in extracted["cron_jobs"]:
+        principal = job.run_as or "unknown"
+        binary = job.command.split()[0] if job.command else ""
+        needs = _dedupe_needs(
+            [{"path": binary, "access": "read,execute", "source": "cron:command"}]
+            if binary.startswith("/") else []
+        )
+        if principal != "root":
+            for p in sorted(by_owner.get(principal, []))[:500]:
+                needs.extend(_dedupe_needs(
+                    [{"path": p, "access": "read,write", "source": "file-owner"}]))
+        hints.append({
+            "principal": principal,
+            "principal_type": "cron_job",
+            "unit": job.source_path,
+            "schedule": job.schedule,
+            "needs": _dedupe_needs([
+                {"path": n["path"], "access": n["access"],
+                 "source": n["sources"][0] if "sources" in n else n.get("source", "")}
+                for n in needs
+            ]),
+        })
+
+    return hints
+
+
+def _flag_risks(extracted: dict, executables: list[sem.ExecutableEntry]) -> list[dict]:
+    """Surface the things a human reviewer should look at before the agent
+    turns this into policy."""
+    risks: list[dict] = []
+
+    for ex in executables:
+        if ex.setuid:
+            risks.append({"severity": "high", "kind": "setuid_binary",
+                          "detail": f"{ex.path} is setuid {ex.owner}",
+                          "path": ex.path})
+        if ex.setgid:
+            risks.append({"severity": "medium", "kind": "setgid_binary",
+                          "detail": f"{ex.path} is setgid {ex.group}",
+                          "path": ex.path})
+        if ex.world_writable:
+            risks.append({"severity": "high", "kind": "world_writable_executable",
+                          "detail": f"{ex.path} is world-writable and executable",
+                          "path": ex.path})
+        if ex.file_capabilities:
+            risks.append({"severity": "high", "kind": "file_capabilities",
+                          "detail": f"{ex.path} carries a security.capability xattr",
+                          "path": ex.path})
+
+    for rule in extracted["sudo_rules"]:
+        sev = "high" if rule.nopasswd else "medium"
+        risks.append({"severity": sev, "kind": "sudoers_rule",
+                      "detail": f"{rule.principal} may run {rule.commands}"
+                                + (" without a password" if rule.nopasswd else ""),
+                      "path": rule.source_path})
+
+    for chg in extracted["membership_changes"]:
+        if chg.group in sem.PRIVILEGED_GROUPS and chg.users_added:
+            risks.append({"severity": "high", "kind": "privileged_group_membership",
+                          "detail": f"{', '.join(chg.users_added)} added to "
+                                    f"privileged group '{chg.group}'",
+                          "path": "/etc/group"})
+
+    for u in extracted["users_added"]:
+        if u.uid == 0:
+            risks.append({"severity": "critical", "kind": "uid_zero_account",
+                          "detail": f"account '{u.name}' has uid 0",
+                          "path": "/etc/passwd"})
+        elif not u.login_disabled and not u.is_system_account:
+            risks.append({"severity": "medium", "kind": "login_capable_account",
+                          "detail": f"account '{u.name}' has a login shell ({u.shell})",
+                          "path": "/etc/passwd"})
+
+    for unit in extracted["systemd_units"]:
+        if (unit.user or "root") == "root" and unit.exec_start:
+            risks.append({"severity": "medium", "kind": "service_runs_as_root",
+                          "detail": f"{unit.name} has no User= directive; runs as root",
+                          "path": unit.path})
+        if unit.ambient_capabilities:
+            risks.append({"severity": "high", "kind": "ambient_capabilities",
+                          "detail": f"{unit.name} grants {' '.join(unit.ambient_capabilities)}",
+                          "path": unit.path})
+
+    for p in extracted["pam_files"]:
+        risks.append({"severity": "high", "kind": "pam_modified",
+                      "detail": f"PAM stack modified: {p}", "path": p})
+
+    return risks
+
+
+# ---------------------------------------------------------------------------
+# Model assembly
+# ---------------------------------------------------------------------------
+
+def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
+    root_prefix = files_mod.get_root_prefix(cfg)
+    added, modified, deleted, errors = _collect_changes(cfg)
+    extracted = _extract(added, modified)
+
+    executables = []
+    for rec in added + [n for (_o, n, _c) in modified]:
+        ex = sem.analyze_executable(rec)
+        if ex:
+            executables.append(ex)
+
+    # Group filesystem entries by category so the agent doesn't have to.
+    fs_by_category: dict[str, list[dict]] = {}
+    for rec in added:
+        pe = sem.to_path_entry(rec)
+        fs_by_category.setdefault(pe.category, []).append(asdict(pe))
+
+    modified_paths = [asdict(sem.to_path_entry(n)) for (_o, n, _c) in modified]
+    deleted_paths = [{"path": r.path, "category": sem.classify_path(r.path)}
+                     for r in deleted]
+
+    hints = _derive_access_hints(extracted, added, modified)
+    risks = _flag_risks(extracted, executables)
+
+    # Baseline provenance for chain-of-custody
+    db_path = cfg["db_path"]
+    conn = files_mod.open_db(db_path)
+    try:
+        meta = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM meta")}
+    finally:
+        conn.close()
+
+    return {
+        "schema_version": sem.SCHEMA_VERSION,
+        "footprint_type": "install_time",
+        "footprint_caveat": (
+            "This describes what the installer wrote to disk. It does not "
+            "describe runtime access. A least-privilege policy derived only "
+            "from this data will over-grant on the install tree and "
+            "under-grant on runtime paths (/tmp, /dev, sockets, resolver "
+            "config). Merge with runtime observation before enforcing."
+        ),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "application": app_name or "unknown",
+        "host": platform.node(),
+        "platform": platform.platform(),
+        "root_prefix": root_prefix or "/",
+        "baseline": {
+            "db_path": db_path,
+            "db_sha256": files_mod.hash_file(db_path, "sha256"),
+            "created_at": meta.get("created_at", "unknown"),
+            "source_host": meta.get("host", "unknown"),
+            "source_os": meta.get("os", "unknown"),
+        },
+        "summary": {
+            "files_added": len(added),
+            "files_modified": len(modified),
+            "files_deleted": len(deleted),
+            "systemd_units": len(extracted["systemd_units"]),
+            "cron_jobs": len(extracted["cron_jobs"]),
+            "users_added": len(extracted["users_added"]),
+            "groups_added": len(extracted["groups_added"]),
+            "membership_changes": len(extracted["membership_changes"]),
+            "sudo_rules": len(extracted["sudo_rules"]),
+            "executables": len(executables),
+            "risks": len(risks),
+            "scan_errors": len(errors),
+        },
+        "principals": {
+            "users_added":        [asdict(u) for u in extracted["users_added"]],
+            "groups_added":       [asdict(g) for g in extracted["groups_added"]],
+            "membership_changes": [asdict(m) for m in extracted["membership_changes"]],
+        },
+        "services": {
+            "systemd_units": [asdict(u) for u in extracted["systemd_units"]],
+        },
+        "scheduled": {
+            "cron_jobs": [asdict(j) for j in extracted["cron_jobs"]],
+        },
+        "privilege": {
+            "sudo_rules":       [asdict(r) for r in extracted["sudo_rules"]],
+            "setuid_binaries":  [asdict(e) for e in executables if e.setuid],
+            "setgid_binaries":  [asdict(e) for e in executables if e.setgid],
+            "file_capabilities":[asdict(e) for e in executables if e.file_capabilities],
+            "pam_files_touched": extracted["pam_files"],
+        },
+        "security_relevant_files": extracted["security_files"],
+        "executables": [asdict(e) for e in executables],
+        "filesystem": {
+            "added_by_category": fs_by_category,
+            "modified": modified_paths,
+            "deleted": deleted_paths,
+        },
+        "access_hints": hints,
+        "risks": risks,
+        "scan_errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
+                  report_path: Optional[str] = None,
+                  quiet: bool = False) -> int:
+    try:
+        model = build_model(cfg, app_name)
+    except FileNotFoundError as e:
+        print(f"[!] {e}", file=sys.stderr)
+        return 2
+
+    body = json.dumps(model, indent=2, default=str)
+
+    if report_path and report_path != "-":
+        tmp = report_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(body + "\n")
+        os.replace(tmp, report_path)
+        if not quiet:
+            _print_summary(model, report_path)
+    else:
+        print(body)
+
+    return 1 if model["summary"]["files_added"] or model["summary"]["files_modified"] else 0
+
+
+def _print_summary(model: dict, path: str) -> None:
+    s = model["summary"]
+    print(f"\nInstall footprint for '{model['application']}' on {model['host']}")
+    print(f"  files:      +{s['files_added']} added, ~{s['files_modified']} modified")
+    print(f"  services:   {s['systemd_units']} systemd unit(s), {s['cron_jobs']} cron job(s)")
+    print(f"  principals: {s['users_added']} user(s), {s['groups_added']} group(s), "
+          f"{s['membership_changes']} membership change(s)")
+    print(f"  privilege:  {s['sudo_rules']} sudoers rule(s), {s['executables']} executable(s)")
+
+    risks = model["risks"]
+    if risks:
+        by_sev: dict[str, int] = {}
+        for r in risks:
+            by_sev[r["severity"]] = by_sev.get(r["severity"], 0) + 1
+        order = ["critical", "high", "medium", "low"]
+        parts = [f"{by_sev[k]} {k}" for k in order if k in by_sev]
+        print(f"  risks:      {', '.join(parts)}")
+        for r in risks:
+            if r["severity"] in ("critical", "high"):
+                print(f"      [{r['severity']}] {r['detail']}")
+    else:
+        print("  risks:      none flagged")
+
+    print(f"\n  → {path}")
+    print("\n  Note: install-time footprint only. Merge with runtime observation")
+    print("  before enforcing a policy. See footprint_caveat in the JSON.\n")

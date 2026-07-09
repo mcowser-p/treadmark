@@ -46,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "the forensic record of what changed.")
     pf.add_argument("--dry-run", action="store_true",
                     help="Show what update would do; write nothing.")
+    pf.add_argument("--root", metavar="DIR",
+                    help="Treat DIR as '/' (mounted image, container rootfs, chroot). "
+                         "Paths in the config are joined onto it; the baseline stores "
+                         "logical paths, so baselines are portable across rootfs.")
 
     # ----- registry (Windows-only at runtime; arg is accepted everywhere) -----
     pr = sub.add_parser("registry", help="Windows registry integrity monitor")
@@ -79,6 +83,19 @@ def build_parser() -> argparse.ArgumentParser:
     pcb.add_argument("db_b", help="Second baseline DB")
     pcb.add_argument("--json", action="store_true")
 
+    # ----- footprint (install-time application footprint for access modeling) -----
+    pfp = sub.add_parser("footprint",
+                         help="Capture an application's install-time footprint as a "
+                              "structured model for least-privilege policy generation")
+    pfp.add_argument("--config", "-c",
+                     help="Config whose baseline was captured on the clean OS")
+    pfp.add_argument("--app", metavar="NAME",
+                     help="Name of the application being profiled")
+    pfp.add_argument("--report", metavar="PATH",
+                     help="Write the model to PATH as JSON. Use '-' or omit for stdout.")
+    pfp.add_argument("--root", metavar="DIR",
+                     help="Treat DIR as '/' (mounted image, container rootfs, chroot).")
+
     # ----- baseline (provenance / inspection) -----
     pb = sub.add_parser("baseline",
                         help="Inspect baseline provenance for forensic / chain-of-custody use")
@@ -93,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _run_files(args) -> int:
     cfg = files.load_config(args.config)
+    if getattr(args, "root", None):
+        cfg["root_prefix"] = args.root
     if not cfg.get("paths"):
         print("[!] config has no `paths` configured.", file=sys.stderr)
         return 2
@@ -159,6 +178,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.baseline_mode == "info":
             cfg = files.load_config(args.config)
             return files.cmd_baseline_info(cfg, json_out=args.json)
+    if args.subsystem == "footprint":
+        from . import footprint as footprint_mod
+        cfg = files.load_config(args.config)
+        if getattr(args, "root", None):
+            cfg["root_prefix"] = args.root
+        if not cfg.get("paths"):
+            print("[!] config has no `paths` configured.", file=sys.stderr)
+            return 2
+        return footprint_mod.cmd_footprint(cfg, app_name=args.app,
+                                           report_path=args.report)
     return 2
 
 
