@@ -5,8 +5,14 @@
 # python-semantic-release parses it to decide releases — so malformed
 # messages are caught here before they ever reach a PR.
 #
+# Portability: this stays POSIX sh on purpose. Git for Windows runs hooks
+# under its bundled sh (bash/msys), so this exact script works on Windows,
+# macOS, and Linux. Do not switch the shebang to bash/python — neither is
+# guaranteed on PATH for Windows contributors. Keep line endings LF
+# (enforced via .gitattributes) or Git-for-Windows' sh will choke.
+#
 # Enable once per clone:   git config core.hooksPath .githooks
-# (scripts/bootstrap.sh does this automatically.)
+# (scripts/bootstrap.sh and scripts/bootstrap.ps1 do this automatically.)
 
 msg=$(head -n1 "$1")
 
@@ -19,17 +25,28 @@ if printf '%s' "$msg" | grep -qE '^(feat|fix|perf|refactor|docs|style|test|ci|ch
     exit 0
 fi
 
+# Colors: only when stderr is a real terminal (so IDE/CI logs don't get
+# escape-code soup), honoring NO_COLOR (https://no-color.org) and dumb
+# terminals. FORCE_COLOR=1 overrides, mainly for testing.
+if [ -n "${FORCE_COLOR:-}" ] || { [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; }; then
+    esc=$(printf '\033')
+    red="${esc}[1;31m"; yel="${esc}[0;33m"; grn="${esc}[0;32m"
+    cyn="${esc}[0;36m"; dim="${esc}[2m";    rst="${esc}[0m"
+else
+    red=''; yel=''; grn=''; cyn=''; dim=''; rst=''
+fi
+
 cat >&2 <<EOF
-[!] commit message does not follow Conventional Commits:
+${red}[!] commit message does not follow Conventional Commits:${rst}
 
-      $msg
+      ${yel}${msg}${rst}
 
-    Expected:  <type>[(scope)][!]: <lowercase imperative subject>
-    Types:     feat fix perf refactor docs style test ci chore build
-    Examples:  feat(footprint): parse polkit rules
-               fix(linux): handle ENOENT during walk
+    Expected:  ${cyn}<type>[(scope)][!]: <lowercase imperative subject>${rst}
+    Types:     ${cyn}feat fix perf refactor docs style test ci chore build${rst}
+    Examples:  ${grn}feat(footprint): parse polkit rules${rst}
+               ${grn}fix(linux): handle ENOENT during walk${rst}
 
-    feat: triggers a minor release, fix:/perf: a patch release.
-    See CONTRIBUTING.md. Bypass (rarely justified): git commit --no-verify
+    ${yel}feat:${rst} triggers a minor release, ${yel}fix:${rst}/${yel}perf:${rst} a patch release.
+    See CONTRIBUTING.md. ${dim}Bypass (rarely justified): git commit --no-verify${rst}
 EOF
 exit 1

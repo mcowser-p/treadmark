@@ -28,6 +28,14 @@ python -m pip install --quiet build pyinstaller pyyaml pywin32
 Write-Host ">>> Installing cairn in editable mode..."
 python -m pip install -e ".[all]"
 
+# Conventional-commit enforcement: PR titles/commits drive releases via
+# python-semantic-release, so catch malformed messages at commit time.
+# The hook is POSIX sh; Git for Windows runs it under its bundled sh.
+if ((Test-Path ".git") -and (Test-Path ".githooks")) {
+    Write-Host ">>> Enabling repo git hooks (.githooks/commit-msg)..."
+    git config core.hooksPath .githooks
+}
+
 if (Get-Command dotnet -ErrorAction SilentlyContinue) {
     if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
         Write-Host ">>> Installing WiX (.NET tool) for MSI builds..."
