@@ -92,6 +92,78 @@ step "baseline provenance"
 cairn baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline info broken"
 
 # ---------------------------------------------------------------------------
+# 3b. Drift detection in EVERY watched top folder — one marker per top dir
+# from the shipped config, each individually asserted in the report.
+# (/bin and /sbin are usr-merged symlinks on modern distros; the marker
+# then also appears under /usr/bin — both spellings being reported is
+# correct behavior, we assert the path we planted.)
+# ---------------------------------------------------------------------------
+step "per-top-folder drift: plant one marker in each watched top dir"
+planted=""
+for d in /etc /bin /sbin /usr/bin /usr/sbin /boot; do
+    if [ ! -d "$d" ]; then
+        echo "    (skipping $d — not present on this target)"
+        continue
+    fi
+    marker="$d/cairn-smoke-marker-$(echo "${d#/}" | tr '/' '-')"
+    echo "smoke marker" > "$marker"
+    planted="$planted $marker"
+done
+[ -n "$planted" ] || fail "no top dirs available to plant markers in"
+
+step "per-top-folder drift: scan reports every marker"
+rc=0; cairn files scan --config "$CFG" --report /tmp/topdirs.json >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 1 ] || fail "top-folder drift scan exited $rc, expected 1"
+for p in $planted; do
+    grep -q "\"$p\"" /tmp/topdirs.json \
+        || fail "marker not reported: $p — is that top folder being walked?"
+done
+echo "    all markers reported:$planted"
+
+step "per-top-folder drift: accept-all, rescan expects exit 0"
+rc=0; cairn files update --config "$CFG" --accept-all >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 1 ] || fail "accept-all update exited $rc (expected 1: it reports what it accepts)"
+rc=0; cairn files scan --config "$CFG" >/tmp/scan-topdirs.out 2>&1 || rc=$?
+[ "$rc" -eq 0 ] || { cat /tmp/scan-topdirs.out; fail "post-accept-all scan exited $rc"; }
+
+# ---------------------------------------------------------------------------
+# 3c. A brand-new top-level folder is fully captured. The watched path does
+# not exist at baseline time (init warns and skips it); when it appears,
+# the scan must report the directory tree AND everything nested inside.
+# ---------------------------------------------------------------------------
+step "new top folder: baseline a watched path that doesn't exist yet"
+NT_CFG=/tmp/newtop-config.json
+cat > "$NT_CFG" <<'EOF'
+{
+  "db_path": "/var/lib/cairn/newtop-baseline.db",
+  "paths": ["/cairn-smoke-newtop"],
+  "store_content": true
+}
+EOF
+cairn files init --config "$NT_CFG" >/dev/null 2>&1 || fail "newtop baseline init failed"
+
+step "new top folder: create /cairn-smoke-newtop with a nested tree"
+mkdir -p /cairn-smoke-newtop/nested/deeper
+echo "top-level file"  > /cairn-smoke-newtop/app.conf
+echo "nested payload"  > /cairn-smoke-newtop/nested/deeper/data.bin
+printf '\x7fELF fake' > /cairn-smoke-newtop/nested/tool
+chmod 755 /cairn-smoke-newtop/nested/tool
+
+step "new top folder: scan captures the entire tree"
+rc=0; cairn files scan --config "$NT_CFG" --report /tmp/newtop.json >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 1 ] || fail "newtop scan exited $rc, expected 1"
+for p in /cairn-smoke-newtop \
+         /cairn-smoke-newtop/app.conf \
+         /cairn-smoke-newtop/nested \
+         /cairn-smoke-newtop/nested/tool \
+         /cairn-smoke-newtop/nested/deeper \
+         /cairn-smoke-newtop/nested/deeper/data.bin; do
+    grep -q "\"$p\"" /tmp/newtop.json \
+        || fail "new top folder capture missed: $p"
+done
+echo "    full tree captured (dirs + nested files + executable)"
+
+# ---------------------------------------------------------------------------
 # 4. Footprint capture of real package installs — the core use case.
 # Fresh baseline → install a package from the distro repos → `cairn
 # footprint` must surface the systemd unit, the binary, the config tree,
