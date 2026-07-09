@@ -119,6 +119,31 @@ jobs:
           if-no-files-found: error
 
   # =========================================================================
+  # 2a½. Smoke-test the freshly built packages on real target distros,
+  # both architectures. Gates the attach job: a package that won't install
+  # or run on Ubuntu 24.04 / AlmaLinux 10 never reaches the GitHub Release.
+  # =========================================================================
+  smoke:
+    needs: [release, linux]
+    if: needs.release.outputs.released == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:24.04', 'almalinux:10']
+        arch: [x86_64, aarch64]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/
+      - run: DIST_DIR="$PWD/dist" bash scripts/smoke-test.sh
+
+  # =========================================================================
   # 2b. Build Windows artifacts at the new version.
   #
   # DISABLED for the Linux-only release line. Re-enable: uncomment this job,
@@ -156,7 +181,7 @@ jobs:
   # 3. Attach all artifacts to the GitHub Release semantic-release created.
   # =========================================================================
   attach:
-    needs: [release, linux]   # re-add 'windows' when Windows builds return
+    needs: [release, linux, smoke]   # re-add 'windows' when Windows builds return
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
