@@ -17,6 +17,21 @@ paths:
   - /sbin
   - /usr/bin
   - /usr/sbin
+  # Unpackaged binaries land here — classic drop location:
+  - /usr/local/bin
+  - /usr/local/sbin
+  # Vendor systemd tree: units, generators, system-sleep/shutdown hooks —
+  # all persistence vectors. (/etc/systemd is covered by /etc above;
+  # /lib/systemd is the usr-merge alias of this on modern distros;
+  # /run/systemd is runtime-transient, not persistent state.)
+  - /usr/lib/systemd
+  # Per-user crontabs:
+  - /var/spool/cron
+  # Third-party applications and user-reachable persistence
+  # (~/.ssh/authorized_keys, shell rc files):
+  - /opt
+  - /home
+  - /root
   - /boot
 
 exclude:
@@ -66,6 +81,14 @@ exclude:
   - /boot/initrd
   - /boot/initramfs
 
+  # --- Home-directory noise (applies under /home and /root). Deliberately
+  #     minimal: shell rc files, ~/.ssh, and shell history stay WATCHED —
+  #     rc-file persistence and history wiping are tamper indicators.
+  #     Interactive workstations may need more here; servers rarely do. ---
+  - /.cache/
+  - /.local/share/Trash/
+  - /snap/
+
   # --- Deliberately NOT excluded (classic tamper targets — leave watched):
   #     /etc/hosts               hosts-file redirection is a textbook attack
   #     /etc/ssl/certs/          rogue CA insertion
@@ -103,8 +126,10 @@ max_file_size_mb: 500
 #
 # Caveat: the baseline DB then contains snapshots of monitored files. The
 # DB is mode 0700 root-only on Linux and ACL-locked on Windows, but this
-# can mean storing sensitive config (secrets, keys) in the baseline. Set
-# false to disable.
+# can mean storing sensitive config (secrets, keys) in the baseline —
+# especially with /home and /root watched: dotfiles and SSH private keys
+# are small enough to be captured. Treat the baseline DB itself as
+# sensitive, or set false to disable content capture.
 store_content: true
 store_content_max_kb: 256   # don't store text files larger than this
 

@@ -6,6 +6,7 @@ All notable changes to cairn are documented here. The format follows [Keep a Cha
 
 ### Features
 
+- Widened default watch set in `/etc/cairn/cairn.yaml`: now also monitors `/opt`, `/home`, `/root`, `/usr/local/bin`, `/usr/local/sbin`, the vendor systemd tree (`/usr/lib/systemd` — units, generators, sleep/shutdown hooks), and per-user crontabs (`/var/spool/cron`). Home-dir noise (`.cache`, Trash, snap) is excluded, but shell rc files, `~/.ssh`, and shell history stay watched. Note: with `store_content` on, watching `/home`/`/root` can capture dotfiles and SSH keys into the (root-only) baseline DB — treat it as sensitive.
 - Curated noise excludes in the default `/etc/cairn/cairn.yaml`: package-manager bookkeeping, caches, package-tool backup droppings, initramfs images, and `/run` are now excluded out of the box, while classic tamper targets (`/etc/hosts`, CA bundles, `/etc/machine-id`, SSH host keys, the kernel image) stay watched. A commented-out "golden baseline / cross-host compare" block covers per-host identity files. **Upgrade note:** on a host with an existing baseline, the next scan reports newly-excluded paths as deleted once — accept them with `cairn files update --accept`.
 - `cairn footprint` embeds container image metadata (`USER`, `ENTRYPOINT`, `CMD`, `ENV`, exposed ports) from `<root>.inspect.json` when scanning with `--root`, and detects unfaithful rootfs extractions (non-root `docker export | tar -x` drops uid/gid and setuid bits), stamping `fidelity: degraded` into the report and warning on scans.
 
