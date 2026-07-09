@@ -100,7 +100,9 @@ cairn baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline inf
 # ---------------------------------------------------------------------------
 step "per-top-folder drift: plant one marker in each watched top dir"
 planted=""
-for d in /etc /bin /sbin /usr/bin /usr/sbin /boot; do
+for d in /etc /bin /sbin /usr/bin /usr/sbin \
+         /usr/local/bin /usr/local/sbin /usr/lib/systemd/system \
+         /var/spool/cron /opt /home /root /boot; do
     if [ ! -d "$d" ]; then
         echo "    (skipping $d — not present on this target)"
         continue
@@ -166,23 +168,23 @@ echo "    full tree captured (dirs + nested files + executable)"
 # ---------------------------------------------------------------------------
 # 4. Footprint capture of real package installs — the core use case.
 # Fresh baseline → install a package from the distro repos → `cairn
-# footprint` must surface the systemd unit, the binary, the config tree,
-# and the runs-as-root risk. Runs for nginx and Apache — Apache's package,
-# unit, binary, and config tree all differ across distro families
-# (apache2 on Debian/Ubuntu, httpd on RHEL-family), which is exactly the
-# variation worth testing.
+# footprint` must surface its semantic objects. Covers the common web
+# servers and databases; package names, units, binaries, config trees,
+# and created service accounts all differ across distro families —
+# exactly the variation worth testing.
 #
-# Uses a dedicated config: units land in /usr/lib/systemd/system, which the
-# shipped forensic default deliberately doesn't watch (this mirrors the
-# documented footprint workflow of using a footprint-tuned config).
+# Uses a dedicated config: units land under /usr/lib/systemd, which the
+# shipped forensic default watches but a footprint capture needs paired
+# with a matching baseline (this mirrors the documented footprint
+# workflow of using a footprint-tuned config).
 # ---------------------------------------------------------------------------
 step "footprint: write footprint-tuned config"
 FP_CFG=/tmp/footprint-config.json
 cat > "$FP_CFG" <<'EOF'
 {
   "db_path": "/var/lib/cairn/footprint-baseline.db",
-  "paths": ["/etc", "/usr/bin", "/usr/sbin", "/usr/lib/systemd/system",
-            "/var/spool/cron"],
+  "paths": ["/etc", "/usr/bin", "/usr/sbin", "/usr/libexec",
+            "/usr/lib/systemd", "/usr/lib/postgresql", "/var/spool/cron"],
   "exclude": ["/etc/ld.so.cache", "/etc/mtab", "/etc/resolv.conf",
               "/etc/adjtime", "/etc/.pwd.lock"],
   "store_content": true,
@@ -198,16 +200,16 @@ if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq
 fi
 
-# capture_footprint <app> <package> <unit> <binary> <config-tree>
+# capture_footprint <app> <package> <required-grep>...
 # Re-baselines first so each footprint contains only its own package,
-# then installs, captures, asserts the semantic objects, and prints the
-# summary of what the install touched.
+# then installs, captures, asserts every required pattern appears in the
+# model, and prints the summary of what the install touched.
 capture_footprint() {
-    app="$1"; pkg="$2"; unit="$3"; binary="$4"; conf="$5"
+    app="$1"; pkg="$2"; shift 2
     json="$FOOTPRINT_DIR/footprint-$app.json"
 
     step "footprint($app): fresh baseline"
-    cairn files init --config "$FP_CFG" --force >/dev/null \
+    cairn files init --config "$FP_CFG" --force >/dev/null 2>&1 \
         || fail "footprint($app): baseline init failed"
 
     step "footprint($app): install $pkg from distro repos"
@@ -223,14 +225,10 @@ capture_footprint() {
     [ "$rc" -eq 1 ] || { cat "/tmp/footprint-$app.out";
         fail "footprint($app) exited $rc, expected 1 (changes present)"; }
 
-    grep -q "\"$unit\"" "$json" \
-        || fail "footprint($app) missed the $unit systemd unit"
-    grep -q "$binary" "$json" \
-        || fail "footprint($app) missed the $binary binary"
-    grep -q '"service_runs_as_root"' "$json" \
-        || fail "footprint($app) missed the service_runs_as_root risk ($unit has no User=)"
-    grep -q "$conf" "$json" \
-        || fail "footprint($app) missed the $conf config tree"
+    for pattern in "$@"; do
+        grep -q -- "$pattern" "$json" \
+            || fail "footprint($app) model is missing: $pattern"
+    done
 
     # Show what the install actually did — the whole point of the exercise.
     step "footprint($app): what the install touched"
@@ -246,16 +244,47 @@ capture_footprint() {
 
     # Informational: some packages create their service account (Alma's
     # nginx/httpd), others reuse a pre-existing one (Ubuntu's www-data).
-    if ! grep -q '"users_added": \[\]' "$json"; then
+    # Keyed on the summary COUNT — membership_changes entries also carry
+    # a users_added list that is [] for new empty groups.
+    if ! grep -q '"users_added": 0,' "$json"; then
         step "footprint($app): service account creation captured (users_added)"
     fi
 }
 
-capture_footprint nginx nginx nginx.service /usr/sbin/nginx /etc/nginx
+# Common assertions: systemd unit parsed, binary analyzed, config tree
+# seen, plus package-specific signals (runs-as-root risk where the unit
+# has no User=, unit identity extraction where it does, service-account
+# creation from the passwd diff).
+capture_footprint nginx nginx \
+    '"nginx.service"' '/usr/sbin/nginx' '/etc/nginx' '"service_runs_as_root"'
+
 if command -v apt-get >/dev/null 2>&1; then
-    capture_footprint apache apache2 apache2.service /usr/sbin/apache2 /etc/apache2
+    # ----- Debian/Ubuntu family -----
+    capture_footprint apache apache2 \
+        '"apache2.service"' '/usr/sbin/apache2' '/etc/apache2' '"service_runs_as_root"'
+    capture_footprint haproxy haproxy \
+        '"haproxy.service"' '/usr/sbin/haproxy' '/etc/haproxy'
+    capture_footprint lighttpd lighttpd \
+        '"lighttpd.service"' '/usr/sbin/lighttpd' '/etc/lighttpd'
+    capture_footprint mariadb mariadb-server \
+        '"mariadb.service"' '"name": "mysql"' '/etc/mysql'
+    capture_footprint postgresql postgresql \
+        '"postgresql.service"' '"name": "postgres"' '/etc/postgresql'
+    capture_footprint redis redis-server \
+        '"redis-server.service"' '/usr/bin/redis-server' '/etc/redis'
 else
-    capture_footprint apache httpd httpd.service /usr/sbin/httpd /etc/httpd
+    # ----- RHEL family (lighttpd is EPEL-only — skipped; Redis was
+    # replaced by Valkey in RHEL 10) -----
+    capture_footprint apache httpd \
+        '"httpd.service"' '/usr/sbin/httpd' '/etc/httpd' '"service_runs_as_root"'
+    capture_footprint haproxy haproxy \
+        '"haproxy.service"' '/usr/sbin/haproxy' '/etc/haproxy'
+    capture_footprint mariadb mariadb-server \
+        '"mariadb.service"' '"name": "mysql"' '/etc/my.cnf'
+    capture_footprint postgresql postgresql-server \
+        '"postgresql.service"' '"name": "postgres"' '"user": "postgres"'
+    capture_footprint valkey valkey \
+        '"valkey.service"' '/usr/bin/valkey-server' '/etc/valkey'
 fi
 
 # ---------------------------------------------------------------------------
