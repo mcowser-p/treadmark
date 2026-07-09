@@ -404,6 +404,64 @@ def _flag_risks(extracted: dict, executables: list[sem.ExecutableEntry]) -> list
 
 
 # ---------------------------------------------------------------------------
+# Container image metadata
+# ---------------------------------------------------------------------------
+
+def _load_container_meta(root_prefix: str) -> Optional[dict]:
+    """Load <root_prefix>.inspect.json if present (written next to the rootfs
+    by scripts/container-rootfs.sh) and pull out the parts of the container's
+    access model that live outside the filesystem: USER is the runtime
+    principal for a container with no systemd unit, and ENTRYPOINT/CMD are
+    what actually runs.
+
+    Never fatal: any parse problem prints an informational note and returns
+    None — a footprint without container metadata is incomplete, not wrong.
+    """
+    if not root_prefix:
+        return None
+    inspect_path = root_prefix.rstrip("/") + ".inspect.json"
+    if not os.path.exists(inspect_path):
+        return None
+    try:
+        with open(inspect_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # docker/podman `image inspect` emit an array of one object.
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        if not isinstance(data, dict):
+            raise ValueError("unexpected top-level JSON shape")
+        config = data.get("Config") or {}
+        user = (config.get("User") or "").strip()
+        meta = {
+            "source": inspect_path,
+            "image": {
+                "id": data.get("Id"),
+                "repo_tags": data.get("RepoTags") or [],
+            },
+            "user": user or "root",
+            "entrypoint": config.get("Entrypoint") or [],
+            "cmd": config.get("Cmd") or [],
+            # Env in badly-built images frequently carries secrets. The
+            # footprint JSON can already contain sensitive content (stored
+            # config diffs), so include it as-is and treat the report itself
+            # as sensitive.
+            "env": config.get("Env") or [],
+            "exposed_ports": config.get("ExposedPorts") or {},
+        }
+        if user and user not in ("root", "0"):
+            meta["note"] = (
+                f"Image runs as USER {user}; that user is the container's "
+                "runtime principal, and service_runs_as_root findings from "
+                "unit files may not apply inside this container."
+            )
+        return meta
+    except (OSError, ValueError, KeyError) as e:
+        print(f"[i] could not parse {inspect_path}: {e}; "
+              "continuing without container metadata", file=sys.stderr)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Model assembly
 # ---------------------------------------------------------------------------
 
@@ -439,7 +497,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
     finally:
         conn.close()
 
-    return {
+    model = {
         "schema_version": sem.SCHEMA_VERSION,
         "footprint_type": "install_time",
         "footprint_caveat": (
@@ -505,6 +563,17 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
         "scan_errors": errors,
     }
 
+    # Rootfs-scan extras: extraction-fidelity assessment and container image
+    # metadata. Both only exist for --root scans; keys are absent otherwise.
+    fidelity = files_mod.assess_root_fidelity(cfg)
+    if fidelity is not None:
+        model["fidelity"] = fidelity
+    container = _load_container_meta(root_prefix)
+    if container is not None:
+        model["container"] = container
+
+    return model
+
 
 # ---------------------------------------------------------------------------
 # CLI entry point
@@ -518,6 +587,8 @@ def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
     except FileNotFoundError as e:
         print(f"[!] {e}", file=sys.stderr)
         return 2
+
+    files_mod.warn_if_degraded(model.get("fidelity"))
 
     body = json.dumps(model, indent=2, default=str)
 

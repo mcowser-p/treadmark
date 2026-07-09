@@ -160,3 +160,86 @@ def test_footprint_without_baseline_exits_2(run_cli, linux_rootfs, rootfs_config
                             "--app", "x")
     assert rc == 2
     assert "no baseline" in err
+
+
+# ---------------------------------------------------------------------------
+# Container image metadata (<root>.inspect.json auto-load)
+# ---------------------------------------------------------------------------
+
+FAKE_INSPECT = [{
+    "Id": "sha256:abc123",
+    "RepoTags": ["myapp:1.0"],
+    "Config": {
+        "User": "myapp",
+        "Entrypoint": ["/usr/bin/myapp"],
+        "Cmd": ["--serve"],
+        "Env": ["PATH=/usr/bin:/bin"],
+        "ExposedPorts": {"8080/tcp": {}},
+    },
+}]
+
+
+def _capture_footprint(run_cli, root, cfg_path, report):
+    rc, _out, err = run_cli("footprint", "-c", cfg_path, "--root", str(root),
+                            "--app", "myapp", "--report", str(report))
+    return rc, err, json.loads(report.read_text())
+
+
+def _init_and_install(run_cli, linux_rootfs, rootfs_config, *, name):
+    root = linux_rootfs(name=name)
+    cfg_path, _cfg = rootfs_config(name=f"{name}-baseline")
+    rc = run_cli("files", "init", "-c", cfg_path, "--root", str(root), "--force")[0]
+    assert rc == 0
+    install_app(root)
+    return root, cfg_path
+
+
+def test_container_section_loaded_from_inspect_json(run_cli, linux_rootfs,
+                                                    rootfs_config, tmp_path):
+    root, cfg_path = _init_and_install(run_cli, linux_rootfs, rootfs_config,
+                                       name="ctr")
+    inspect = tmp_path / "ctr.inspect.json"
+    inspect.write_text(json.dumps(FAKE_INSPECT))
+
+    _rc, _err, model = _capture_footprint(run_cli, root, cfg_path,
+                                          tmp_path / "ctr-fp.json")
+    c = model["container"]
+    assert c["user"] == "myapp"
+    assert c["entrypoint"] == ["/usr/bin/myapp"]
+    assert c["cmd"] == ["--serve"]
+    assert c["exposed_ports"] == {"8080/tcp": {}}
+    assert c["image"]["repo_tags"] == ["myapp:1.0"]
+    # Non-root USER carries the runtime-principal note.
+    assert "runtime principal" in c["note"]
+
+
+def test_container_root_user_has_no_note(run_cli, linux_rootfs,
+                                         rootfs_config, tmp_path):
+    root, cfg_path = _init_and_install(run_cli, linux_rootfs, rootfs_config,
+                                       name="ctr-root")
+    payload = [{"Id": "sha256:def", "Config": {"User": "", "Cmd": ["/bin/sh"]}}]
+    (tmp_path / "ctr-root.inspect.json").write_text(json.dumps(payload))
+
+    _rc, _err, model = _capture_footprint(run_cli, root, cfg_path,
+                                          tmp_path / "ctr-root-fp.json")
+    c = model["container"]
+    assert c["user"] == "root"
+    assert "note" not in c
+
+
+def test_no_container_section_without_file(footprint_model):
+    model, _root = footprint_model
+    assert "container" not in model
+
+
+def test_malformed_inspect_json_is_nonfatal(run_cli, linux_rootfs,
+                                            rootfs_config, tmp_path):
+    root, cfg_path = _init_and_install(run_cli, linux_rootfs, rootfs_config,
+                                       name="ctr-bad")
+    (tmp_path / "ctr-bad.inspect.json").write_text("{not json at all")
+
+    rc, err, model = _capture_footprint(run_cli, root, cfg_path,
+                                        tmp_path / "ctr-bad-fp.json")
+    assert rc == 1   # footprint itself still succeeds (drift present)
+    assert "container" not in model
+    assert "could not parse" in err

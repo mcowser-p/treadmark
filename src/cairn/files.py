@@ -427,6 +427,76 @@ def walk_paths(cfg: dict) -> Iterator[str]:
                 yield fp
 
 
+def assess_root_fidelity(cfg: dict, sample_limit: int = 5000) -> Optional[dict]:
+    """Sanity-check a --root tree for signs of an unfaithful extraction.
+
+    `docker export | tar -x` run without root silently drops uid/gid
+    ownership and setuid bits. Everything downstream that reasons about
+    ownership or setuid then produces confident wrong answers. This heuristic
+    catches the degenerate signature: (a) virtually every file owned by one
+    non-root uid, AND (b) zero setuid bits under the bin directories. Both
+    must hold — distroless images legitimately have no setuid binaries, and
+    single-uid images exist, but a rootfs satisfying both at once almost
+    certainly lost its metadata during extraction.
+
+    Returns None for live-host scans (no root_prefix); otherwise
+    {"status": "ok"|"degraded", "sampled_files": N, "reasons": [...]}.
+    This is a warning signal only — callers must never fail on it.
+    """
+    root_prefix = get_root_prefix(cfg)
+    if not root_prefix:
+        return None
+
+    bin_prefixes = ("/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/")
+    uid_counts: dict[int, int] = {}
+    setuid_seen = False
+    sampled = 0
+    for fp in walk_paths(cfg):
+        if sampled >= sample_limit:
+            break
+        try:
+            st = os.lstat(fp)
+        except (OSError, PermissionError):
+            continue
+        if not stat.S_ISREG(st.st_mode):
+            continue
+        sampled += 1
+        uid_counts[st.st_uid] = uid_counts.get(st.st_uid, 0) + 1
+        if st.st_mode & stat.S_ISUID:
+            logical = to_logical(os.path.abspath(fp), root_prefix)
+            if logical.startswith(bin_prefixes):
+                setuid_seen = True
+
+    result: dict = {"status": "ok", "sampled_files": sampled, "reasons": []}
+    if not sampled:
+        return result
+
+    top_uid, top_count = max(uid_counts.items(), key=lambda kv: kv[1])
+    uniform_nonroot = top_uid != 0 and top_count > 0.99 * sampled
+    if uniform_nonroot and not setuid_seen:
+        result["status"] = "degraded"
+        result["reasons"] = [
+            f"{100.0 * top_count / sampled:.1f}% of {sampled} sampled files are "
+            f"owned by uid {top_uid} (non-root); extraction likely ran without "
+            "root / --same-owner",
+            "no setuid binaries under /bin, /sbin, /usr/bin, /usr/sbin; "
+            "setuid bits were likely stripped during extraction",
+        ]
+    return result
+
+
+def warn_if_degraded(fidelity: Optional[dict]) -> None:
+    """Print a loud stderr warning when a --root tree looks unfaithful."""
+    if not fidelity or fidelity.get("status") != "degraded":
+        return
+    print("[!] rootfs fidelity degraded — ownership and setuid data are "
+          "unreliable:", file=sys.stderr)
+    for reason in fidelity.get("reasons", []):
+        print(f"    - {reason}", file=sys.stderr)
+    print("    Re-extract as root (e.g. sudo scripts/container-rootfs.sh) "
+          "for a faithful tree.", file=sys.stderr)
+
+
 # ---------------------------------------------------------------------------
 # SQLite storage
 # ---------------------------------------------------------------------------
@@ -658,6 +728,10 @@ def cmd_scan(cfg: dict, json_out: bool = False,
     if not os.path.exists(db_path):
         print(f"[!] no baseline at {db_path}; run `init` first", file=sys.stderr)
         return 2
+
+    # --root scans of a badly-extracted tree produce confidently wrong
+    # ownership/setuid answers; warn loudly up front (never fail).
+    warn_if_degraded(assess_root_fidelity(cfg))
 
     conn = open_db(db_path)
     baseline = load_baseline(conn)
