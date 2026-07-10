@@ -177,6 +177,12 @@ The JSON is the interface. A reasonable prompt shape:
 
 The last sentence matters. The install tree is the thing most likely to get over-granted, because it's the biggest section of the document and the easiest to hand-wave into "the app probably needs all of this."
 
+**Windows prompt addendum.** When the footprint is `schema 1.0-windows`, additionally instruct:
+
+> Treat each service's `run_as` and each scheduled task's identity as the principal set — the SAM is unreadable, so never claim an account was "created", only that it is *referenced*; flag every non-builtin `run_as` for on-host reconciliation. Derive DACL scoping (`icacls`) from the per-file `owner`/`acl` evidence; prefer `NT SERVICE\<name>` virtual accounts or gMSAs over custom accounts, and propose `sc.exe sidtype restricted` plus privilege stripping per user-mode service (staged first). Emit the `service_binary` sha256 inventory as AppLocker/WDAC allowlist input, but regenerate rule hashes on-host — AppLocker uses Authenticode PE hashes, not flat-file sha256. Kernel drivers are not principals: route them to driver-signing / WDAC review. Firewall rules, COM registrations, and WMI subscriptions are capture gaps — anything network-facing is `[needs-runtime-confirmation]`. State the install channel: winget/MSI installs have full footprint visibility; Windows Feature installs activate pre-staged component-store payload, so absent services are not evidence of absence — complete them from app knowledge and say so.
+
+The output format for a full report is the Windows section map in the runbooks reading guide (`smoke-out/runbooks/README.md`): the same 13 sections as the Linux runbooks, with Windows meanings, plus a PowerShell/INF/XML stub set.
+
 ## Windows
 
 Windows services (reconstructed from the registry `Services` subtree) and scheduled tasks (parsed from their Task Scheduler XML) are extracted as semantic objects, the same way systemd units are on Linux — each carries its run-as identity, start type, and image path, and file entries carry the Windows owner + DACL (the analog of Linux mode/owner/group). Run `cairn all init` on the clean OS (not just `cairn files init`) so the registry half is baselined.
