@@ -80,8 +80,16 @@ _BUILTIN_LOW = {
     "nt authority\\localservice",
 }
 
+# Anchored: matches ONLY the exact service key (…\Services\<name>) — used to
+# group a service's own values, ignoring its subkeys (Parameters, Security).
 _SERVICES_KEY = re.compile(
     r"\\services\\(?P<name>[^\\]+)$", re.IGNORECASE)
+
+# Unanchored: the service segment from ANY path under Services, including a
+# subkey (…\Services\<name>\Parameters\… → <name>) — used to detect which
+# services an install touched, even if only a subkey value changed.
+_SERVICE_IN_PATH = re.compile(
+    r"\\services\\(?P<name>[^\\]+)", re.IGNORECASE)
 
 
 @dataclass
@@ -126,8 +134,10 @@ def service_image_binary(image_path: Optional[str]) -> Optional[str]:
 
 
 def service_name_from_key(key_path: str) -> Optional[str]:
-    """If key_path is a service key (…\\Services\\<name>), return <name>."""
-    m = _SERVICES_KEY.search(key_path or "")
+    """Return the service <name> for any path under …\\Services\\<name> —
+    the service key itself OR any subkey (so a change under Parameters still
+    identifies the service that was touched). None if not under Services."""
+    m = _SERVICE_IN_PATH.search(key_path or "")
     return m.group("name") if m else None
 
 

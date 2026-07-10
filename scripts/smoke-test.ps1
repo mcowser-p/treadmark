@@ -173,19 +173,20 @@ Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
 Step "footprint(iis): capture and verify"
 & $exe footprint --config $fpCfg --app iis --report $iisFp
 if ($LASTEXITCODE -ne 1) { Fail "iis footprint exited $LASTEXITCODE, expected 1" }
-# Assert on the things that prove the feature works, not on a specific service
-# name (which can pre-exist / vary by Windows SKU): it's a Windows model, it
-# reconstructed services with run-as identities, and it saw the IIS files.
+# IIS's core service (W3SVC) is pre-staged on Server images, so whether the
+# install touches any service registry key is not reliable. Assert what IIS
+# ALWAYS produces: it's a Windows model and the inetsrv file surface was
+# captured WITH owner + ACL (the permission data). Service reconstruction is
+# covered by unit tests and demonstrated by the Datadog capture below.
 $model = Get-Content $iisFp -Raw | ConvertFrom-Json
 if ($model.schema_version -ne "1.0-windows") { Fail "not a Windows footprint model" }
-$svc = @($model.services.windows_services)
-if ($svc.Count -lt 1) { Fail "no Windows services reconstructed" }
-if (-not ($svc | Where-Object { $_.run_as })) { Fail "no service run-as identity captured" }
-if ($model.filesystem.added_by_category.PSObject.Properties.Name -notcontains "iis") {
-    Fail "IIS file surface (inetsrv) not detected"
+$iisFiles = @($model.filesystem.added_by_category.iis)
+if ($iisFiles.Count -lt 1) { Fail "IIS file surface (inetsrv) not detected" }
+if (-not ($iisFiles | Where-Object { $_.owner -and $_.acl })) {
+    Fail "file owner/ACL not captured (permission data missing)"
 }
-$iisSvc = $svc | Where-Object { $_.name -match 'W3SVC|WAS|WMSVC|IISADMIN' }
-Write-Host "    reconstructed $($svc.Count) service(s); IIS-specific: $(@($iisSvc).Count) → $iisFp"
+$svc = @($model.services.windows_services)
+Write-Host "    IIS: $($iisFiles.Count) inetsrv files w/ owner+ACL; $($svc.Count) service(s) touched → $iisFp"
 Summarize $model "IIS (Web-Server role)"
 
 # Re-baseline (IIS now part of the baseline) so the Datadog footprint is

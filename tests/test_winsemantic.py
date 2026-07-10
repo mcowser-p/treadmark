@@ -97,7 +97,9 @@ def test_non_service_records_ignored():
 
 def test_service_name_from_key():
     assert ws.service_name_from_key(SERVICES + r"\W3SVC") == "W3SVC"
-    assert ws.service_name_from_key(SERVICES + r"\BITS\Parameters") is None
+    # a change under a subkey still identifies the service that was touched
+    assert ws.service_name_from_key(SERVICES + r"\BITS\Parameters") == "BITS"
+    assert ws.service_name_from_key(SERVICES + r"\W32Time\Config") == "W32Time"
     assert ws.service_name_from_key(r"HKLM\Software\Foo") is None
 
 
