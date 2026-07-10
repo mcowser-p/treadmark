@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -641,6 +642,90 @@ def _flag_risks_windows(services, tasks, added_files=()) -> list[dict]:
     return risks
 
 
+def _win_account_leaf(name: Optional[str]) -> str:
+    """Normalize a Windows account for comparison: strip the domain/machine
+    qualifier and lowercase. `.\\ddagentuser`, `RUNNERVM\\ddagentuser`, and
+    `ddagentuser` all name the same local account in different notations."""
+    return (name or "").rsplit("\\", 1)[-1].strip().lower()
+
+
+_WIN_PATH_IN_ARGS = re.compile(r'[A-Za-z]:\\[^",<>|?*]+')
+
+
+def _derive_access_hints_windows(services, tasks, added, modified) -> list[dict]:
+    """Windows analog of _derive_access_hints: for each identity the install
+    introduced, gather the paths it plausibly needs and at what access level.
+
+    Hints, not a policy — derived from declared intent (the service's
+    ImagePath and its arguments, a task's Command) and from file ownership.
+    The enforcement side is the operator's: scope DACLs (icacls) to these
+    principals, and prefer virtual service accounts over LocalSystem.
+    """
+    from . import winsemantic as wsem
+
+    # Index installed files by owner (leaf-normalized) for attribution.
+    # Windows has no group column; ownership is the evidence.
+    by_owner: dict[str, list[str]] = {}
+    for rec in list(added) + [n for (_o, n, _c) in modified]:
+        leaf = _win_account_leaf(getattr(rec, "owner", None))
+        if leaf:
+            by_owner.setdefault(leaf, []).append(rec.path)
+
+    hints: list[dict] = []
+
+    for s in services:
+        # Kernel drivers are not user-mode principals — their "identity" is
+        # the kernel. They're surfaced in risks, not access hints.
+        if s.is_driver:
+            continue
+        needs: list[dict] = []
+        binary = s.image_binary
+        if binary:
+            needs.append({"path": binary, "access": "read,execute",
+                          "source": "service:ImagePath"})
+            # Paths passed as arguments (e.g. Datadog's --cfgpath "C:\ProgramData\…")
+            # are declared intent too — the service reads its config from there.
+            args = (s.image_path or "").replace(binary, "", 1)
+            for m in _WIN_PATH_IN_ARGS.findall(args):
+                needs.append({"path": m.strip().rstrip("\\"), "access": "read",
+                              "source": "service:ImagePathArgument"})
+
+        # Files the installer created owned by this principal are strong
+        # evidence. Skip SYSTEM/builtin identities: like root on Linux, they
+        # own most of the OS by default, so ownership carries no signal.
+        if not s.runs_as_builtin:
+            for p in sorted(by_owner.get(_win_account_leaf(s.run_as), []))[:500]:
+                needs.append({"path": p, "access": "read,write",
+                              "source": "file-owner"})
+
+        hints.append({
+            "principal": s.run_as,
+            "principal_type": "windows_service",
+            "service": s.name,
+            "runs_as_system": s.runs_as_system,
+            "needs": _dedupe_needs(needs),
+        })
+
+    for t in tasks:
+        needs = []
+        if t.command:
+            needs.append({"path": t.command, "access": "read,execute",
+                          "source": "task:Command"})
+        if not t.runs_as_system:
+            for p in sorted(by_owner.get(_win_account_leaf(t.run_as), []))[:500]:
+                needs.append({"path": p, "access": "read,write",
+                              "source": "file-owner"})
+        hints.append({
+            "principal": t.run_as or "unknown",
+            "principal_type": "scheduled_task",
+            "task": t.name,
+            "run_level": t.run_level,
+            "needs": _dedupe_needs(needs),
+        })
+
+    return hints
+
+
 def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
     from . import winsemantic as wsem
     from . import winreg_mon
@@ -708,6 +793,7 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         })
 
     risks = _flag_risks_windows(services, tasks, added)
+    hints = _derive_access_hints_windows(services, tasks, added, modified)
 
     db_path = cfg["db_path"]
     conn = files_mod.open_db(db_path)
@@ -760,6 +846,7 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
                                 for (_o, n) in reg_modified],
             "note": registry_error,
         },
+        "access_hints": hints,
         "risks": risks,
         "scan_errors": errors,
     }

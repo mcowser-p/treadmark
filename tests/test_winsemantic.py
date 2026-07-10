@@ -258,6 +258,73 @@ def test_acl_permissive_principal():
     assert f(acl) == "Everyone"
 
 
+def test_derive_access_hints_windows():
+    from cairn.footprint import _derive_access_hints_windows
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class FR:
+        path: str
+        owner: Optional[str] = None
+
+    services = [
+        # Datadog shape: custom account, config path passed as an argument
+        ws.WindowsService(
+            name="datadogagent", key_path="k1",
+            image_path=r'"C:\Program Files\Datadog\bin\agent.exe" run '
+                       r'--cfgpath "C:\ProgramData\Datadog"',
+            start_type="auto", run_as=".\\ddagentuser"),
+        # SYSTEM service: no file-owner attribution (SYSTEM owns everything)
+        ws.WindowsService(
+            name="sysvc", key_path="k2",
+            image_path=r"C:\Windows\System32\svchost.exe -k netsvcs",
+            start_type="auto", run_as="LocalSystem"),
+        # kernel driver: not a user-mode principal, no hint
+        ws.WindowsService(
+            name="ddnpm", key_path="k3", service_type=1,
+            image_path=r"\??\C:\...\ddnpm.sys", run_as="LocalSystem"),
+    ]
+    tasks = [
+        ws.ScheduledTask(name="Upd", source_path="t", run_as="S-1-5-18",
+                         run_level="HighestAvailable",
+                         command=r"C:\Program Files\App\update.exe"),
+    ]
+    added = [
+        # owner in machine\account notation — must match run_as ".\ddagentuser"
+        FR(r"C:\ProgramData\Datadog\datadog.yaml", "RUNNERVM\\ddagentuser"),
+        FR(r"C:\Program Files\Datadog\bin\agent.exe", "NT AUTHORITY\\SYSTEM"),
+    ]
+    hints = _derive_access_hints_windows(services, tasks, added, [])
+
+    by_svc = {h.get("service") or h.get("task"): h for h in hints}
+    assert set(by_svc) == {"datadogagent", "sysvc", "Upd"}   # driver excluded
+
+    dd = by_svc["datadogagent"]
+    assert dd["principal"] == ".\\ddagentuser"
+    assert dd["principal_type"] == "windows_service"
+    assert dd["runs_as_system"] is False
+    needs = {n["path"]: n for n in dd["needs"]}
+    # binary: read+execute from ImagePath
+    assert "execute" in needs[r"C:\Program Files\Datadog\bin\agent.exe"]["access"]
+    # config dir: read, declared via the --cfgpath argument
+    assert "read" in needs[r"C:\ProgramData\Datadog"]["access"]
+    assert any("ImagePathArgument" in s
+               for s in needs[r"C:\ProgramData\Datadog"]["sources"])
+    # owned file: read,write via leaf-normalized owner match
+    yaml_need = needs[r"C:\ProgramData\Datadog\datadog.yaml"]
+    assert "write" in yaml_need["access"] and "file-owner" in yaml_need["sources"]
+
+    # SYSTEM service gets its binary but NO ownership-derived paths
+    sy = by_svc["sysvc"]
+    assert sy["runs_as_system"] is True
+    assert all("file-owner" not in n["sources"] for n in sy["needs"])
+
+    # scheduled task principal
+    up = by_svc["Upd"]
+    assert up["principal_type"] == "scheduled_task"
+    assert up["needs"][0]["path"].endswith("update.exe")
+
+
 def test_flag_windows_world_writable_file():
     from cairn.footprint import _flag_risks_windows
     from dataclasses import dataclass

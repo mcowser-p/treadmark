@@ -245,7 +245,18 @@ if ($ddOk) {
     & $exe footprint --config $fpCfg --app datadog --report $ddFp
     if ($LASTEXITCODE -eq 1 -and (Select-String -Path $ddFp -Pattern 'Datadog' -Quiet)) {
         Write-Host "    captured Datadog service → $ddFp"
-        Summarize (Get-Content $ddFp -Raw | ConvertFrom-Json) "Datadog agent"
+        $ddModel = Get-Content $ddFp -Raw | ConvertFrom-Json
+        # access_hints must join the principals to their paths: the agent's
+        # services run as .\ddagentuser, so at least one hint must carry that
+        # principal with a non-empty needs list (binary + owned files).
+        $ddHints = @($ddModel.access_hints | Where-Object {
+            $_.principal -match 'ddagentuser' -and @($_.needs).Count -gt 0
+        })
+        if ($ddHints.Count -lt 1) {
+            Fail "no access_hints derived for the ddagentuser services"
+        }
+        Write-Host "    access_hints: $(@($ddModel.access_hints).Count) principals, $($ddHints.Count) for ddagentuser"
+        Summarize $ddModel "Datadog agent"
     } else {
         Write-Host "    [i] Datadog install produced no footprint delta — skipping"
         Remove-Item $ddFp -ErrorAction SilentlyContinue
