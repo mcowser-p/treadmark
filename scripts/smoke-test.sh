@@ -301,9 +301,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4b. Extended footprint set: enterprise agents and developer toolchains.
-# SMOKE_EXTENDED=1 enables it (local runs and the release pipeline);
-# PR CI runs only the core set above to stay fast.
+# 4b. Extended footprint set: enterprise agents that each exercise a distinct
+# semantic-extraction path. SMOKE_EXTENDED=1 enables it (local runs and the
+# release pipeline); PR CI runs only the core set above to stay fast.
+#
+# Trimmed to ~half its original size — kept the captures that hit a UNIQUE
+# detector or surfaced a real finding:
+#   sssd    → pam_modified (identity-stack tampering)
+#   auditd  → the audit ruleset (highest-order tamper target)
+#   postfix → setgid_binary (postdrop/postqueue) + service account
+#   snmpd   → community-string secrets; also caught RHEL's root-for-life snmpd
+#   autofs  → LDAP auth-credential file (0600) on RHEL
+#   podman  → large dependency closure + rootless socket
+#   fail2ban (Debian only) → log/firewall agent, no PAM
+# Dropped (lower signal): chrony, cron, nfs, qemu-guest-agent, and the dev
+# toolchains pip/java/nodejs/git (degenerate — no units or service accounts).
+# Their footprint models still live in smoke-out/ and their runbooks are
+# generated; re-add a line here if a regression needs live coverage.
 #
 # Not covered on purpose: Grafana Alloy, telegraf, filebeat, zabbix
 # (vendor repos only — this suite tests default-repo packages);
@@ -321,25 +335,12 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
             '"fail2ban.service"' '/etc/fail2ban'
         capture_footprint postfix postfix \
             '"postfix.service"' '/etc/postfix' '"setgid_binary"' '"name": "postfix"'
-        capture_footprint chrony chrony \
-            '"chrony.service"' '/etc/chrony'
-        capture_footprint cron cron \
-            '"cron.service"' '/etc/cron'
-        capture_footprint nfs nfs-common \
-            '"rpc-statd.service"' '/usr/sbin/rpc.statd'
         capture_footprint autofs autofs \
             '"autofs.service"' '/etc/auto'
         capture_footprint snmpd snmpd \
             '"snmpd.service"' '/etc/snmp'
-        capture_footprint qemu-guest-agent qemu-guest-agent \
-            '"qemu-guest-agent.service"' 'qemu-ga'
         capture_footprint podman podman \
             '"podman.socket"' '/usr/bin/podman' '/etc/containers'
-        # --- developer toolchains (no units — binaries + /etc integration) ---
-        capture_footprint pip python3-pip '/usr/bin/pip3'
-        capture_footprint java default-jre-headless '/usr/bin/java' '/etc/alternatives'
-        capture_footprint nodejs nodejs '/usr/bin/node'
-        capture_footprint git git '/usr/bin/git'
     else
         # --- enterprise agents (RHEL family) ---
         capture_footprint sssd sssd \
@@ -348,25 +349,12 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
             '"auditd.service"' '/etc/audit'
         capture_footprint postfix postfix \
             '"postfix.service"' '/etc/postfix' '"setgid_binary"' '"name": "postfix"'
-        capture_footprint chrony chrony \
-            '"chronyd.service"' '/etc/chrony'
-        capture_footprint cron cronie \
-            '"crond.service"' '/etc/cron'
-        capture_footprint nfs nfs-utils \
-            '"rpc-statd.service"' '/usr/sbin/rpc.statd'
         capture_footprint autofs autofs \
             '"autofs.service"' '/etc/auto'
         capture_footprint snmpd net-snmp \
             '"snmpd.service"' '/etc/snmp'
-        capture_footprint qemu-guest-agent qemu-guest-agent \
-            '"qemu-guest-agent.service"' 'qemu-ga'
         capture_footprint podman podman \
             '"podman.socket"' '/usr/bin/podman' '/etc/containers'
-        # --- developer toolchains ---
-        capture_footprint pip python3-pip '/usr/bin/pip3'
-        capture_footprint java java-21-openjdk-headless '/usr/bin/java' '/etc/alternatives'
-        capture_footprint nodejs nodejs '/usr/bin/node'
-        capture_footprint git git '/usr/bin/git'
     fi
 fi
 
