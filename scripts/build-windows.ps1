@@ -24,8 +24,10 @@ pyinstaller `
     --workpath build\_pyi `
     --specpath build `
     --paths src `
+    --icon windows\cairn.ico `
     --hidden-import yaml `
     --hidden-import win32security `
+    --hidden-import ntsecuritycon `
     scripts\cairn_launcher.py | Out-Null
 Move-Item -Force dist\_pyi\cairn.exe dist\cairn-windows-x86_64.exe
 Remove-Item -Recurse -Force dist\_pyi
@@ -45,9 +47,11 @@ if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
 wix extension add -g WixToolset.UI.wixext
 wix extension add -g WixToolset.Util.wixext
 
-# Stage the artifacts the .wxs references next to cairn.wxs
+# Stage the artifacts the .wxs references next to cairn.wxs.
+# The MSI ships the Windows-native default config (watches Program Files,
+# drivers\etc, Start Menu startup, Tasks) — NOT the Linux cairn.yaml.
 Copy-Item dist\cairn-windows-x86_64.exe windows\
-Copy-Item packaging\cairn.yaml          windows\
+Copy-Item packaging\cairn-windows.yaml  windows\cairn.yaml
 
 Push-Location windows
 try {

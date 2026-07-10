@@ -19,7 +19,7 @@
 
   What this MSI deliberately does NOT do:
     - Register a Scheduled Task. Scheduling is an explicit ops decision —
-      the example schtasks command is in windows\examples\register-cairn-task.ps1.
+      see windows\README.md for the schtasks one-liner.
     - Build the initial baseline. Operators run `cairn files init` after
       editing the config.
 
@@ -38,13 +38,14 @@
 
   <!--
     UpgradeCode is the immortal identifier for this product line. Once chosen
-    NEVER change it. This is the GUID baked in for cairn at v0.2.0.
+    NEVER change it. Generated fresh for this repo (replaces the template
+    placeholder). Do not regenerate once a release has shipped.
   -->
   <Package
     Name="Cairn File Integrity Monitor"
     Manufacturer="Your Org"
     Version="$(var.Version)"
-    UpgradeCode="930ffdcd-a101-4776-8189-816e224d76fb"
+    UpgradeCode="589f68fc-59fe-41a1-8ef8-2c2b31bdcc16"
     Scope="perMachine"
     InstallerVersion="500"
     Compressed="yes">

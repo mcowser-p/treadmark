@@ -1,0 +1,81 @@
+# C:\ProgramData\Cairn\cairn.yaml — default config for Windows, edit before
+# first run.
+#
+# This is the FILE half of cairn on Windows. The REGISTRY half (autoruns,
+# services, Winlogon, policies) is monitored separately by `cairn registry`,
+# which ships its own sensible default key list — run both:
+#   cairn all init   --config C:\ProgramData\Cairn\cairn.yaml
+#   cairn all scan   --config C:\ProgramData\Cairn\cairn.yaml
+#
+# The watch set below mirrors the Linux config's philosophy: cover the
+# executable and persistence surfaces an attacker would touch, exclude the
+# high-churn caches that would drown the signal.
+
+db_path: C:\ProgramData\Cairn\baseline.db
+
+paths:
+  # Program binaries — where installed software (and dropped payloads) live
+  - C:\Program Files
+  - C:\Program Files (x86)
+
+  # Hosts file: DNS redirection is a classic tamper (the Windows /etc/hosts)
+  - C:\Windows\System32\drivers\etc
+
+  # Scheduled tasks — a top-tier persistence mechanism (XML task definitions)
+  - C:\Windows\System32\Tasks
+  - C:\Windows\Tasks
+
+  # Startup-folder persistence (per-machine and the shell startup tree)
+  - C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup
+
+  # Uncomment to widen coverage (larger baseline, slower scans):
+  # - C:\Windows\System32          # core OS binaries — big, mostly static
+  # - C:\Users                     # per-user profiles: rc-equivalent + startup
+
+exclude:
+  # --- High-churn OS/state that changes on its own ---
+  - C:\Windows\System32\config\        # live registry hives (use `cairn registry`)
+  - C:\Windows\System32\LogFiles\
+  - C:\Windows\System32\catroot2\      # code-signing catalog cache
+  - C:\Windows\System32\spool\
+  - C:\Windows\ServiceProfiles\
+  - C:\Windows\Temp\
+  - \Prefetch\
+  - \WinSxS\                           # component store: enormous, churns on updates
+
+  # --- Program Files churn (self-updaters, caches) ---
+  - \Update\
+  - \Updates\
+  - \cache\
+  - \Cache\
+  - \logs\
+  - \Logs\
+
+  # --- Package / installer bookkeeping ---
+  - C:\ProgramData\Package Cache\      # MSI/bootstrapper cache
+  - C:\Program Files\WindowsApps\      # Store apps: sealed, signed, churn
+
+exclude_extensions:
+  - .log
+  - .tmp
+  - .etl        # event trace logs
+  - .evtx       # event logs
+  - .pf         # prefetch
+  - .dmp        # crash dumps
+
+follow_symlinks: false
+hash_algorithm: sha256
+max_file_size_mb: 500
+
+# Store gzipped content of small text files in the baseline so `cairn files
+# scan` shows unified diffs of changed configs. On Windows the baseline DB is
+# ACL-locked to Administrators/SYSTEM (see the MSI's DataDir permissions).
+# Most Program Files content is binary, so content capture is smaller here
+# than on a Linux /etc; still useful for the hosts file and text configs.
+store_content: true
+store_content_max_kb: 256
+
+# Optional report output — see docs/output-formats.md.
+# report:
+#   path: C:\ProgramData\Cairn\reports\latest.json
+#   format: json
