@@ -120,6 +120,11 @@ Remove-Item -Path "HKCU:\Software\CairnSmoke" -Recurse -Force -ErrorAction Silen
 # Baseline covers the file surface (inetsrv, Program Files) AND the registry
 # Services subtree, so services show up as reconstructed objects.
 # ---------------------------------------------------------------------------
+# Seconds to wait after an install before scanning, so install-time service
+# churn settles and every service finishes registering. Overridable via env
+# for local runs that want it faster.
+$SettleSeconds = if ($env:CAIRN_SETTLE_SECONDS) { [int]$env:CAIRN_SETTLE_SECONDS } else { 20 }
+
 Step "footprint: baseline files + registry Services"
 $fpCfg = "$env:TEMP\cairn-fp.json"
 $fpDb  = "$env:TEMP\cairn-fp.db"
@@ -137,6 +142,29 @@ $fpDb  = "$env:TEMP\cairn-fp.db"
     registry_keys = @("HKLM\System\CurrentControlSet\Services")
     registry_recursive = $true
     registry_max_depth = 2
+    # Noise denylist: OS services that mutate on their own between baseline and
+    # scan (NTP time sync, Defender definition updates, the update/servicing
+    # stack). walk_key skips any subtree whose path contains one of these, in
+    # BOTH baseline and scan, so they never show as a diff. This is the Windows
+    # analog of the Linux noise-exclude list — a settle delay alone can't stop
+    # services that churn continuously. Substring match against the full key.
+    registry_exclude = @(
+        "\Services\W32Time",          # NTP: LastKnownGoodTime updates itself
+        "\Services\bits",             # BITS toggles during background transfers
+        "\Services\wuauserv",         # Windows Update
+        "\Services\DoSvc",            # Delivery Optimization
+        "\Services\sppsvc",           # Software Protection (SvcRestartTask)
+        "\Services\TrustedInstaller", # servicing stack — churns on feature installs
+        "\Services\WinDefend",        # Defender family: constant definition updates
+        "\Services\WdFilter",
+        "\Services\WdNisSvc",
+        "\Services\WdNisDrv",
+        "\Services\WdBoot",
+        "\Services\WdAiNisDrv",
+        "\Services\Sense",
+        "\Services\MDCoreSvc",
+        "\Services\SharedAccess"      # Internet Connection Sharing
+    )
 } | ConvertTo-Json | Out-File -FilePath $fpCfg -Encoding ascii
 & $exe all init --config $fpCfg
 if ($LASTEXITCODE -ne 0) { Fail "footprint baseline (all init) failed" }
@@ -169,6 +197,12 @@ function Summarize($model, $label) {
 Step "footprint(iis): install the Web-Server role"
 Import-Module ServerManager -ErrorAction SilentlyContinue
 Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+# Let the system settle before scanning: the role install starts/registers
+# services and the servicing stack keeps writing for a few seconds after the
+# cmdlet returns. Scanning too soon captures that transient churn (and can
+# miss services still being written). The denylist handles the continuous
+# noise; this handles the install-time transient.
+Start-Sleep -Seconds $SettleSeconds
 
 Step "footprint(iis): capture and verify"
 & $exe footprint --config $fpCfg --app iis --report $iisFp
@@ -202,6 +236,9 @@ try {
 } catch { $ddOk = $false }
 
 if ($ddOk) {
+    # Same settle window: give the agent's 11 services time to finish
+    # registering before we scan, so the capture is complete, not partial.
+    Start-Sleep -Seconds $SettleSeconds
     Step "footprint(datadog): capture"
     & $exe footprint --config $fpCfg --app datadog --report $ddFp
     if ($LASTEXITCODE -eq 1 -and (Select-String -Path $ddFp -Pattern 'Datadog' -Quiet)) {
