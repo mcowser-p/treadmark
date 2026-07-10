@@ -1,21 +1,23 @@
 # .github/workflows/release.yml
 #
-# Triggered by every push to main. semantic-release decides whether a release
-# is warranted (presence of feat:/fix:/BREAKING since the last tag), bumps the
-# version, tags, and creates a GitHub Release. Build jobs then attach
-# artifacts to that release.
+# Triggered by every push to main. Builds and smoke-tests the artifacts FIRST,
+# and only creates the tag + GitHub Release once everything is green — so a
+# broken build can never leave a published release (or even a consumed version
+# number) behind.
 #
 # Flow:
-#   1. release job: python-semantic-release analyzes commits, bumps version
-#      in pyproject.toml, commits, tags, and creates the GH Release.
-#   2. If released == true:
-#        linux job builds wheel + binary + .deb + .rpm for x86_64 and arm64
-#        windows job builds .exe + .msi
-#   3. attach job downloads all artifacts, generates SHA256SUMS, uploads
-#      everything to the GH Release.
+#   test     unit tests gate everything (fail fast before spending build time).
+#   version  compute the NEXT release version with no side effects
+#            (semantic-release --print). No tag, no commit, no push.
+#   linux /  build the artifacts, stamping that computed version into the
+#   windows  working tree so .deb/.rpm/.msi + `cairn --version` are correct.
+#   smoke    install the freshly built packages on real distros / via the MSI.
+#   release  ONLY now: semantic-release bumps pyproject, commits, tags, pushes,
+#            and creates the GitHub Release.
+#   attach   download all artifacts, checksum, upload to that release.
 #
-# semantic-release's release commit is tagged with [skip ci] so it doesn't
-# loop on itself.
+# If `version` finds no release is warranted, every downstream job is skipped.
+# The release commit is tagged [skip ci] so it doesn't loop on itself.
 
 name: release
 
@@ -34,9 +36,7 @@ concurrency:
 
 jobs:
   # =========================================================================
-  # 0. Tests gate the release job itself, not just the builds: semantic-release
-  #    tags and publishes the GitHub Release in step 1, and a tag from a broken
-  #    commit cannot be un-published cleanly.
+  # 0. Unit tests gate everything else — fail fast before any build minutes.
   # =========================================================================
   test:
     runs-on: ubuntu-latest
@@ -49,39 +49,49 @@ jobs:
       - run: pytest
 
   # =========================================================================
-  # 1. Decide if a release is warranted; if so, tag and create GH Release.
+  # 1. Decide the next version WITHOUT any side effects. semantic-release
+  #    --print computes the version the accumulated commits warrant; nothing
+  #    is committed, tagged, or pushed here. The build jobs consume this so
+  #    they can stamp the right version BEFORE the tag exists.
   # =========================================================================
-  release:
+  version:
     needs: test
     runs-on: ubuntu-latest
     outputs:
-      released: ${{ steps.semrel.outputs.released }}
-      version:  ${{ steps.semrel.outputs.version }}
-      tag:      ${{ steps.semrel.outputs.tag }}
+      released: ${{ steps.compute.outputs.released }}
+      version:  ${{ steps.compute.outputs.version }}
+      tag:      ${{ steps.compute.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0     # semantic-release needs the full history to analyze commits
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run python-semantic-release
-        id: semrel
-        uses: python-semantic-release/python-semantic-release@v10
+          fetch-depth: 0     # full history for commit analysis
+      - uses: actions/setup-python@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Summarize
+          python-version: '3.12'
+      - run: pip install "python-semantic-release>=10,<11"
+      - name: compute next version
+        id: compute
         run: |
-          echo "released: ${{ steps.semrel.outputs.released }}"
-          echo "version:  ${{ steps.semrel.outputs.version }}"
-          echo "tag:      ${{ steps.semrel.outputs.tag }}"
+          # Both --print flags are pure (no writes). A release is warranted
+          # iff the next version differs from the last released one.
+          next=$(semantic-release version --print 2>/dev/null || true)
+          last=$(semantic-release version --print-last-released 2>/dev/null || true)
+          echo "next='$next'  last='$last'"
+          if [ -n "$next" ] && [ "$next" != "$last" ]; then
+            echo "released=true"   >> "$GITHUB_OUTPUT"
+            echo "version=$next"   >> "$GITHUB_OUTPUT"
+            echo "tag=v$next"      >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false"  >> "$GITHUB_OUTPUT"
+            echo "No release warranted — downstream jobs will skip."
+          fi
 
   # =========================================================================
-  # 2a. Build Linux artifacts at the new version.
+  # 2a. Build Linux artifacts at the computed version (both architectures).
   # =========================================================================
   linux:
-    needs: release
-    if: needs.release.outputs.released == 'true'
+    needs: version
+    if: needs.version.outputs.released == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -93,14 +103,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Check out the commit semantic-release just made — it has the
-          # bumped version in pyproject.toml.
-          ref: ${{ needs.release.outputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      # No tag exists yet — stamp the computed version into the working tree
+      # so the .deb/.rpm metadata and `cairn --version` report it.
+      - name: stamp the release version
+        run: python scripts/stamp_version.py "${{ needs.version.outputs.version }}"
 
       - name: install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -119,13 +130,67 @@ jobs:
           if-no-files-found: error
 
   # =========================================================================
-  # 2a½. Smoke-test the freshly built packages on real target distros,
-  # both architectures. Gates the attach job: a package that won't install
-  # or run on Ubuntu 24.04 / AlmaLinux 10 never reaches the GitHub Release.
+  # 2b. Build the Windows exe + MSI at the computed version, then smoke-test
+  # the MSI — all in ONE job (a second windows-latest runner is far slower
+  # than the build itself). WiX + pip cached across runs.
+  #
+  # Windows is now a FIRST-CLASS release gate: if this job fails, no release
+  # is cut. (Soak over — it previously ran continue-on-error.)
+  #
+  # Org strings + License.rtf in windows/ are still placeholders (SETUP.md
+  # pre-publish TODO) — the MSI installs but isn't brand-correct yet.
+  # =========================================================================
+  windows:
+    needs: version
+    if: needs.version.outputs.released == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: cache wix toolset
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.dotnet\tools
+            ~\.wix
+          key: wix-5.0.2
+      - name: stamp the release version
+        shell: pwsh
+        run: python scripts/stamp_version.py "${{ needs.version.outputs.version }}"
+      - name: build binary + msi
+        shell: pwsh
+        run: scripts\build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            dist/cairn-windows-x86_64.exe
+            dist/*.msi
+          if-no-files-found: error
+      - name: smoke-test the msi
+        shell: pwsh
+        run: scripts\smoke-test.ps1
+      # Windows footprint models (IIS, and Datadog if winget worked) as a
+      # WORKFLOW artifact + rendered into the job summary by the smoke script.
+      # Named footprint-* so the release attach step excludes them.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footprint-windows
+          path: footprint-windows-*.json
+          if-no-files-found: ignore
+
+  # =========================================================================
+  # 2c. Smoke-test the freshly built Linux packages on real target distros,
+  # both architectures. Gates the release: a package that won't install or
+  # run on Ubuntu 24.04 / AlmaLinux 10 never gets a tag.
   # =========================================================================
   smoke:
-    needs: [release, linux]
-    if: needs.release.outputs.released == 'true'
+    needs: [version, linux]
+    if: needs.version.outputs.released == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -141,8 +206,6 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.tag }}
       - uses: actions/download-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
@@ -184,72 +247,41 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # =========================================================================
-  # 2b. Build Windows artifacts at the new version, then smoke-test the MSI.
-  #
-  # SOAK: this job is continue-on-error while the Windows pipeline is young
-  # — a Windows flake must not hold Linux release artifacts hostage. The
-  # attach job downloads ALL artifacts, so Windows artifacts attach
-  # opportunistically when green and are simply absent when not.
-  # To flip to BLOCKING once proven: drop the `continue-on-error` line and
-  # add `windows` to attach.needs below.
-  #
-  # Org strings + License.rtf in windows/ are still placeholders (SETUP.md
-  # pre-publish TODO) — the MSI installs but isn't brand-correct yet.
+  # 3. Everything is green — NOW create the release. semantic-release bumps
+  #    pyproject, commits [skip ci], tags, pushes, and creates the GitHub
+  #    Release (empty; assets are attached in the next job).
   # =========================================================================
-  # Build the exe + MSI and smoke-test it in ONE job — a second windows-latest
-  # runner (spin-up + checkout + artifact round-trip) is far slower than the
-  # build itself. WiX tool and pip are cached across runs.
-  windows:
-    needs: release
-    if: needs.release.outputs.released == 'true'
-    continue-on-error: true   # SOAK — see note above
-    runs-on: windows-latest
+  release:
+    needs: [version, linux, windows, smoke]
+    if: needs.version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.semrel.outputs.released }}
+      tag:      ${{ steps.semrel.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release.outputs.tag }}
-      - uses: actions/setup-python@v5
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run python-semantic-release
+        id: semrel
+        uses: python-semantic-release/python-semantic-release@v10
         with:
-          python-version: '3.12'
-          cache: pip
-      - name: cache wix toolset
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~\.dotnet\tools
-            ~\.wix
-          key: wix-5.0.2
-      - name: build binary + msi
-        shell: pwsh
-        run: scripts\build-windows.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x86_64
-          path: |
-            dist/cairn-windows-x86_64.exe
-            dist/*.msi
-          if-no-files-found: error
-      - name: smoke-test the msi
-        shell: pwsh
-        run: scripts\smoke-test.ps1
-      # Windows footprint models (IIS, and Datadog if winget worked) as a
-      # WORKFLOW artifact + rendered into the job summary by the smoke script.
-      # Named footprint-* so the release attach step excludes them.
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: footprint-windows
-          path: footprint-windows-*.json
-          if-no-files-found: ignore
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize
+        run: |
+          echo "released: ${{ steps.semrel.outputs.released }}"
+          echo "version:  ${{ steps.semrel.outputs.version }}"
+          echo "tag:      ${{ steps.semrel.outputs.tag }}"
 
   # =========================================================================
-  # 3. Attach all artifacts to the GitHub Release semantic-release created.
+  # 4. Attach all artifacts to the GitHub Release. Both Linux AND Windows
+  #    builds are attached now (Windows soak is over).
   # =========================================================================
   attach:
-    # SOAK: 'windows' intentionally NOT in needs — it's continue-on-error, so
-    # gating attach on it would defeat the soak. Add it here (and drop its
-    # continue-on-error) once Windows is proven.
-    needs: [release, linux, smoke]
+    needs: [linux, windows, release]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
