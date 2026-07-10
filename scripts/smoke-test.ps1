@@ -109,6 +109,65 @@ if ($LASTEXITCODE -ne 1) { Fail "registry drift scan exited $LASTEXITCODE, expec
 Remove-Item -Path "HKCU:\Software\CairnSmoke" -Recurse -Force -ErrorAction SilentlyContinue
 
 # ---------------------------------------------------------------------------
+# 4b. Windows footprint — install real software (IIS via Windows feature,
+# Datadog via winget) and confirm `cairn footprint` reconstructs the services
+# they register. This is the Windows semantic footprint's first real run.
+#
+# Baseline covers the file surface (inetsrv, Program Files) AND the registry
+# Services subtree, so services show up as reconstructed objects.
+# ---------------------------------------------------------------------------
+Step "footprint: baseline files + registry Services"
+$fpCfg = "$env:TEMP\cairn-fp.json"
+$fpDb  = "$env:TEMP\cairn-fp.db"
+@{
+    db_path = $fpDb
+    paths = @(
+        "$env:SystemRoot\System32\inetsrv",
+        "$env:SystemRoot\System32\Tasks",
+        "C:\Program Files\Datadog",
+        "C:\ProgramData\Datadog"
+    )
+    store_content = $true
+    store_content_max_kb = 512
+    registry_keys = @("HKLM\System\CurrentControlSet\Services")
+    registry_recursive = $true
+    registry_max_depth = 2
+} | ConvertTo-Json | Out-File -FilePath $fpCfg -Encoding ascii
+& $exe all init --config $fpCfg
+if ($LASTEXITCODE -ne 0) { Fail "footprint baseline (all init) failed" }
+
+Step "footprint: install IIS (Web-Server role)"
+Import-Module ServerManager -ErrorAction SilentlyContinue
+Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+
+Step "footprint: install Datadog agent via winget (config-less)"
+$ddOk = $true
+try {
+    winget install --id Datadog.Agent --silent --accept-package-agreements `
+        --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $ddOk = $false }
+} catch { $ddOk = $false }
+if (-not $ddOk) { Write-Host "    [i] Datadog winget install unavailable/failed — IIS still covers the footprint" }
+
+Step "footprint: capture and verify the Windows model"
+& $exe footprint --config $fpCfg --app windows-services --report fp.json
+$rc = $LASTEXITCODE
+if ($rc -ne 1) { Fail "footprint exited $rc, expected 1 (changes present)" }
+$fp = Get-Content fp.json -Raw
+# IIS registers the W3SVC (WWW Publishing) and WAS services — the parser must
+# reconstruct them from the registry Services subtree.
+if ($fp -notmatch '"name": "W3SVC"') { Fail "footprint missed the IIS W3SVC service" }
+if ($fp -notmatch '"schema_version": "1.0-windows"') { Fail "not a Windows footprint model" }
+if ($fp -notmatch '"run_as"') { Fail "service run-as identity not captured" }
+Write-Host "    Windows footprint captured IIS services"
+if ($ddOk -and ($fp -match 'Datadog')) { Write-Host "    Datadog service captured too" }
+
+# Show what the installs registered (the point of the exercise).
+Step "footprint: what the installs registered"
+& $exe footprint --config $fpCfg --app windows-services --report fp.json | Out-Null
+Get-Content fp.json -Raw | Select-String -Pattern '"services":|"name":|"run_as":|"start_type":' | Select-Object -First 20
+
+# ---------------------------------------------------------------------------
 # 5. Uninstall — exe removed, operator config PRESERVED
 # ---------------------------------------------------------------------------
 Step "uninstall; config must survive"
