@@ -156,6 +156,15 @@ def _run_registry(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to a legacy codepage (cp1252) that can't encode
+    # the arrows/checkmarks in our output (→ ✓ …), which crashes init/scan with
+    # a UnicodeEncodeError. Force UTF-8. No-op where stdout is already UTF-8.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
+
     args = build_parser().parse_args(argv)
 
     if args.subsystem == "files":
