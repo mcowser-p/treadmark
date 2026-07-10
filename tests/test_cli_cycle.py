@@ -130,6 +130,16 @@ def test_verify_exit_codes(run_cli, make_config, watch_tree):
     assert run_cli("files", "verify", "-c", cfg_path)[0] == 1
 
 
+def test_all_init_accepts_force(run_cli, make_config, watch_tree):
+    # `cairn all init --force` must work like `files init --force` (the
+    # registry half no-ops on non-Windows). Regression: --force was missing
+    # from the `all` subparser.
+    tree = watch_tree()
+    cfg_path, _cfg = make_config([tree])
+    assert run_cli("all", "init", "-c", cfg_path)[0] == 0
+    assert run_cli("all", "init", "-c", cfg_path, "--force")[0] == 0
+
+
 def test_scan_without_baseline_exits_2(run_cli, make_config, watch_tree):
     tree = watch_tree()
     cfg_path, _cfg = make_config([tree])

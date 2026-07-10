@@ -160,18 +160,27 @@ jobs:
           name: footprint-${{ matrix.name }}-${{ matrix.arch }}
           path: footprint-*.json
           if-no-files-found: ignore
-      # Keep the AlmaLinux httpd footprint as a release reference asset (one
-      # leg only, distinctly named so it attaches without colliding with the
-      # per-run debug footprints above).
-      - name: httpd footprint as release example
-        if: matrix.image == 'almalinux:10' && matrix.arch == 'x86_64'
-        run: cp footprint-apache.json example-footprint-linux-httpd.json
-      - uses: actions/upload-artifact@v4
-        if: matrix.image == 'almalinux:10' && matrix.arch == 'x86_64'
-        with:
-          name: example-footprint-linux
-          path: example-footprint-linux-httpd.json
-          if-no-files-found: ignore
+      # Render the captured footprints into the job summary (counts per app).
+      - name: footprint summary
+        if: always()
+        run: |
+          shopt -s nullglob
+          fps=(footprint-*.json)
+          [ ${#fps[@]} -eq 0 ] && exit 0
+          {
+            echo "### Footprint models — ${{ matrix.name }} ${{ matrix.arch }}"
+            echo ""
+            echo "| app | files+ | modified | risks |"
+            echo "|---|---|---|---|"
+            for f in "${fps[@]}"; do
+              app=$(basename "$f" .json | sed 's/footprint-//')
+              fa=$(grep -m1 '"files_added"'    "$f" | grep -oE '[0-9]+' | head -1)
+              fm=$(grep -m1 '"files_modified"' "$f" | grep -oE '[0-9]+' | head -1)
+              rk=$(grep -m1 '"risks"'          "$f" | grep -oE '[0-9]+' | head -1)
+              echo "| $app | ${fa:-0} | ${fm:-0} | ${rk:-0} |"
+            done
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # =========================================================================
   # 2b. Build Windows artifacts at the new version, then smoke-test the MSI.
@@ -222,14 +231,14 @@ jobs:
       - name: smoke-test the msi
         shell: pwsh
         run: scripts\smoke-test.ps1
-      # Sample Windows footprint models (IIS, and Datadog if winget worked) —
-      # attached to the release as reference output. `if: always()` so they
-      # upload even if a later smoke step fails.
+      # Windows footprint models (IIS, and Datadog if winget worked) as a
+      # WORKFLOW artifact + rendered into the job summary by the smoke script.
+      # Named footprint-* so the release attach step excludes them.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: example-footprints-windows
-          path: example-footprint-windows-*.json
+          name: footprint-windows
+          path: footprint-windows-*.json
           if-no-files-found: ignore
 
   # =========================================================================

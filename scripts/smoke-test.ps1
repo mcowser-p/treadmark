@@ -141,11 +141,30 @@ $fpDb  = "$env:TEMP\cairn-fp.db"
 & $exe all init --config $fpCfg
 if ($LASTEXITCODE -ne 0) { Fail "footprint baseline (all init) failed" }
 
-# Example footprint models are written to the repo root so CI can upload them
-# as release reference assets (named example-* so the attach job includes them
-# and they never collide with the per-run debug footprints).
-$iisFp = "example-footprint-windows-iis.json"
-$ddFp  = "example-footprint-windows-datadog.json"
+# Footprint models are written to the repo root so CI can collect them as
+# WORKFLOW artifacts and render a job-summary — not release assets. Named
+# footprint-* so the release attach step excludes them like the Linux ones.
+$iisFp = "footprint-windows-iis.json"
+$ddFp  = "footprint-windows-datadog.json"
+
+# Append a compact markdown summary of a footprint model to the GitHub job
+# summary (no-op outside CI). PowerShell parses the JSON natively.
+function Summarize($model, $label) {
+    if (-not $env:GITHUB_STEP_SUMMARY) { return }
+    $s = $model.summary
+    $svcNames = (@($model.services.windows_services) | ForEach-Object { $_.name }) -join ", "
+    $lines = @(
+        "### Windows footprint: $label",
+        "",
+        "| files+ | reg values+ | services | tasks | risks |",
+        "|---|---|---|---|---|",
+        "| $($s.files_added) | $($s.registry_values_added) | $($s.services) | $($s.scheduled_tasks) | $($s.risks) |",
+        "",
+        "Services: $svcNames",
+        ""
+    )
+    $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
 
 Step "footprint(iis): install the Web-Server role"
 Import-Module ServerManager -ErrorAction SilentlyContinue
@@ -167,6 +186,7 @@ if ($model.filesystem.added_by_category.PSObject.Properties.Name -notcontains "i
 }
 $iisSvc = $svc | Where-Object { $_.name -match 'W3SVC|WAS|WMSVC|IISADMIN' }
 Write-Host "    reconstructed $($svc.Count) service(s); IIS-specific: $(@($iisSvc).Count) → $iisFp"
+Summarize $model "IIS (Web-Server role)"
 
 # Re-baseline (IIS now part of the baseline) so the Datadog footprint is
 # Datadog-only, not IIS+Datadog.
@@ -185,16 +205,14 @@ if ($ddOk) {
     & $exe footprint --config $fpCfg --app datadog --report $ddFp
     if ($LASTEXITCODE -eq 1 -and (Select-String -Path $ddFp -Pattern 'Datadog' -Quiet)) {
         Write-Host "    captured Datadog service → $ddFp"
+        Summarize (Get-Content $ddFp -Raw | ConvertFrom-Json) "Datadog agent"
     } else {
-        Write-Host "    [i] Datadog install produced no footprint delta — skipping example"
+        Write-Host "    [i] Datadog install produced no footprint delta — skipping"
         Remove-Item $ddFp -ErrorAction SilentlyContinue
     }
 } else {
-    Write-Host "    [i] Datadog winget install unavailable/failed — IIS example still produced"
+    Write-Host "    [i] Datadog winget install unavailable/failed — IIS footprint still produced"
 }
-
-Step "footprint: what IIS registered"
-Get-Content $iisFp -Raw | Select-String -Pattern '"services":|"name":|"run_as":|"start_type":' | Select-Object -First 20
 
 # ---------------------------------------------------------------------------
 # 5. Uninstall — exe removed, operator config PRESERVED

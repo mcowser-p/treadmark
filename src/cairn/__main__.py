@@ -62,6 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("command", choices=["init", "scan", "update", "verify"])
     pa.add_argument("--config", "-c")
     pa.add_argument("--json", action="store_true")
+    pa.add_argument("--force", action="store_true",
+                    help="Overwrite existing baseline on init (files half)")
 
     # ----- compare -----
     pc = sub.add_parser("compare",

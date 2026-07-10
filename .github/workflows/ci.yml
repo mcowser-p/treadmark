@@ -94,6 +94,26 @@ jobs:
           name: footprint-${{ matrix.name }}
           path: footprint-*.json
           if-no-files-found: ignore
+      - name: footprint summary
+        if: always()
+        run: |
+          shopt -s nullglob
+          fps=(footprint-*.json)
+          [ ${#fps[@]} -eq 0 ] && exit 0
+          {
+            echo "### Footprint models — ${{ matrix.name }}"
+            echo ""
+            echo "| app | files+ | modified | risks |"
+            echo "|---|---|---|---|"
+            for f in "${fps[@]}"; do
+              app=$(basename "$f" .json | sed 's/footprint-//')
+              fa=$(grep -m1 '"files_added"'    "$f" | grep -oE '[0-9]+' | head -1)
+              fm=$(grep -m1 '"files_modified"' "$f" | grep -oE '[0-9]+' | head -1)
+              rk=$(grep -m1 '"risks"'          "$f" | grep -oE '[0-9]+' | head -1)
+              echo "| $app | ${fa:-0} | ${fm:-0} | ${rk:-0} |"
+            done
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Build the Windows exe + MSI and smoke-test it in ONE job (install →
   # files+registry cycle → uninstall). One runner, not two; WiX + pip cached.
@@ -126,3 +146,11 @@ jobs:
       - name: smoke-test the msi
         shell: pwsh
         run: scripts\smoke-test.ps1
+      # Windows footprint models as a workflow artifact (the smoke script
+      # also renders them into the job summary). Not a release asset.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footprint-windows
+          path: footprint-windows-*.json
+          if-no-files-found: ignore
