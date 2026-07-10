@@ -266,6 +266,76 @@ if ($ddOk) {
 }
 
 # ---------------------------------------------------------------------------
+# 4c. Extended footprint captures — more real apps, release runs only
+# (SMOKE_EXTENDED=1, set by release.yml; the Linux smoke uses the same knob).
+#
+# Same capture pipeline as IIS/Datadog: baseline -> install -> settle ->
+# footprint. Each app gets its OWN config + db scoped to its install paths,
+# so baselines are independent and walks stay fast. Every capture here is
+# SOFT: winget flakiness (source agreements, version pins, transient 4xx)
+# must never block a release — a failed app logs [i] and moves on. The hard
+# assertions live in the IIS + Datadog core above.
+#
+# These footprints feed the windows-<ver>-<app> runbooks in
+# smoke-out/runbooks/ (least-privilege reports), like the Linux app set.
+# ---------------------------------------------------------------------------
+if ($env:SMOKE_EXTENDED) {
+    $extApps = @(
+        @{ Name = "postgresql"; WingetId = "PostgreSQL.PostgreSQL.16"
+           Paths = @("C:\Program Files\PostgreSQL") }
+        @{ Name = "chrome";     WingetId = "Google.Chrome"
+           Paths = @("C:\Program Files\Google",
+                     "C:\Program Files (x86)\Google") }
+        @{ Name = "7zip";       WingetId = "7zip.7zip"
+           Paths = @("C:\Program Files\7-Zip") }
+        # SQL Express is the heavyweight (~10 min install) — the richest
+        # identity exemplar on Windows (per-service virtual accounts).
+        @{ Name = "sqlexpress"; WingetId = "Microsoft.SQLServer.2022.Express"
+           Paths = @("C:\Program Files\Microsoft SQL Server") }
+    )
+    foreach ($app in $extApps) {
+        Step "footprint($($app.Name)): baseline, install via winget, capture"
+        $appCfg = "$env:TEMP\cairn-fp-$($app.Name).json"
+        $appDb  = "$env:TEMP\cairn-fp-$($app.Name).db"
+        $appFp  = "footprint-windows-$($app.Name).json"
+        @{
+            db_path = $appDb
+            paths = @($app.Paths + "$env:SystemRoot\System32\Tasks")
+            store_content = $false
+            registry_keys = @("HKLM\System\CurrentControlSet\Services")
+            registry_recursive = $true
+            registry_max_depth = 2
+        } | ConvertTo-Json | Out-File -FilePath $appCfg -Encoding ascii
+        & $exe all init --config $appCfg --force | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "    [i] $($app.Name): baseline failed — skipping"
+            continue
+        }
+        $ok = $true
+        try {
+            winget install --id $app.WingetId --silent --accept-package-agreements `
+                --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { $ok = $false }
+        } catch { $ok = $false }
+        if (-not $ok) {
+            Write-Host "    [i] $($app.Name): winget install unavailable/failed — skipping"
+            continue
+        }
+        Start-Sleep -Seconds $SettleSeconds
+        & $exe footprint --config $appCfg --app $app.Name --report $appFp
+        if ($LASTEXITCODE -eq 1) {
+            Write-Host "    captured $($app.Name) -> $appFp"
+            Summarize (Get-Content $appFp -Raw | ConvertFrom-Json) $app.Name
+        } else {
+            Write-Host "    [i] $($app.Name): no footprint delta (exit $LASTEXITCODE) — skipping"
+            Remove-Item $appFp -ErrorAction SilentlyContinue
+        }
+    }
+} else {
+    Write-Host "`n[i] SMOKE_EXTENDED not set — skipping extended app captures (postgresql, chrome, 7zip, sqlexpress)"
+}
+
+# ---------------------------------------------------------------------------
 # 5. Uninstall — exe removed, operator config PRESERVED
 # ---------------------------------------------------------------------------
 Step "uninstall; config must survive"

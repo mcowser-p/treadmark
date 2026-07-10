@@ -172,6 +172,11 @@ jobs:
           if-no-files-found: error
       - name: smoke-test the msi
         shell: pwsh
+        env:
+          # Releases also capture the extended app set (postgresql, chrome,
+          # 7zip, sqlexpress) for the Windows runbooks; PR CI runs only the
+          # IIS+Datadog core for speed — same knob as the Linux smoke.
+          SMOKE_EXTENDED: '1'
         run: scripts\smoke-test.ps1
       # Windows footprint models (IIS, and Datadog if winget worked) as a
       # WORKFLOW artifact + rendered into the job summary by the smoke script.
