@@ -198,6 +198,22 @@ def test_flag_risks_windows():
     assert kinds["scheduled_task_elevated"] == "medium"
 
 
+def test_kernel_driver_risk():
+    from cairn.footprint import _flag_risks_windows
+    # A .sys image (like Datadog's ddnpm) and a Type=1 service both flag high.
+    drv_by_ext = ws.WindowsService(
+        name="ddnpm", key_path="k",
+        image_path=r"\??\C:\Program Files\Datadog\Datadog Agent\bin\agent\driver\ddnpm.sys",
+        start_type="disabled", run_as="LocalSystem")
+    drv_by_type = ws.WindowsService(name="foo", key_path="k2",
+                                    image_path=r"C:\Windows\System32\drivers\foo",
+                                    service_type=1, run_as="LocalSystem")
+    assert drv_by_ext.is_driver and drv_by_type.is_driver
+    risks = _flag_risks_windows([drv_by_ext, drv_by_type], [])
+    drv = [r for r in risks if r["kind"] == "kernel_driver_installed"]
+    assert len(drv) == 2 and all(r["severity"] == "high" for r in drv)
+
+
 # ---------------------------------------------------------------------------
 # ACL interpretation — world-writable analog
 # ---------------------------------------------------------------------------

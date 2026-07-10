@@ -117,6 +117,14 @@ class WindowsService:
         """The executable path from ImagePath, stripping args and quotes."""
         return service_image_binary(self.image_path)
 
+    @property
+    def is_driver(self) -> bool:
+        """Kernel-mode / filesystem driver: Type 1 (SERVICE_KERNEL_DRIVER) or
+        2 (SERVICE_FILE_SYSTEM_DRIVER), or an image ending in .sys."""
+        if self.service_type in (1, 2):
+            return True
+        return (self.image_binary or "").lower().endswith(".sys")
+
 
 def service_image_binary(image_path: Optional[str]) -> Optional[str]:
     """Extract the executable path from a service ImagePath (drops args)."""

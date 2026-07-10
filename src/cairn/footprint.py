@@ -612,6 +612,10 @@ def _flag_risks_windows(services, tasks, added_files=()) -> list[dict]:
         })
 
     for s in services:
+        if s.is_driver:
+            risks.append({"severity": "high", "kind": "kernel_driver_installed",
+                          "detail": f"service '{s.name}' installs a kernel driver "
+                                    f"({s.image_binary})", "path": s.key_path})
         img = s.image_binary or ""
         low = img.lower()
         in_standard = any(x in low for x in
