@@ -288,6 +288,12 @@ if ($env:SMOKE_EXTENDED) {
                      "C:\Program Files (x86)\Google") }
         @{ Name = "7zip";       WingetId = "7zip.7zip"
            Paths = @("C:\Program Files\7-Zip") }
+        # Podman completes the 3-OS set (the Linux smoke captures it on both
+        # distros). On Windows it's CLI + helpers only — the actual engine
+        # lives in a WSL machine created later by `podman machine init`, so
+        # expect a file/registry surface with no services.
+        @{ Name = "podman";     WingetId = "RedHat.Podman"
+           Paths = @("C:\Program Files\RedHat") }
         # SQL Express is the heavyweight (~10 min install) — the richest
         # identity exemplar on Windows (per-service virtual accounts).
         @{ Name = "sqlexpress"; WingetId = "Microsoft.SQLServer.2022.Express"
@@ -332,7 +338,7 @@ if ($env:SMOKE_EXTENDED) {
         }
     }
 } else {
-    Write-Host "`n[i] SMOKE_EXTENDED not set — skipping extended app captures (postgresql, chrome, 7zip, sqlexpress)"
+    Write-Host "`n[i] SMOKE_EXTENDED not set — skipping extended app captures (postgresql, chrome, 7zip, podman, sqlexpress)"
 }
 
 # ---------------------------------------------------------------------------
