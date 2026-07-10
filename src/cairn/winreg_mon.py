@@ -285,6 +285,39 @@ def _enum_all(cfg: dict) -> Iterator[RegRecord]:
         yield from walk_key(k, cfg)
 
 
+def collect_changes(cfg: dict):
+    """Diff the live registry against the baseline. Returns
+    (added, modified, deleted) where modified is a list of (old, new) tuples.
+
+    Windows-only (walks the live registry via winreg). The footprint command
+    consumes this to reconstruct services created by an install. Raises
+    FileNotFoundError if no baseline exists.
+    """
+    import os
+    db_path = cfg["db_path"]
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"no baseline at {db_path}; run `cairn all init` first")
+    conn = open_db(db_path)
+    try:
+        baseline = load_baseline(conn)
+    finally:
+        conn.close()
+
+    seen: set[tuple[str, str]] = set()
+    added: list[RegRecord] = []
+    modified: list[tuple[RegRecord, RegRecord]] = []
+    for rec in _enum_all(cfg):
+        key = (rec.key_path, rec.value_name)
+        seen.add(key)
+        old = baseline.get(key)
+        if old is None:
+            added.append(rec)
+        elif old.value_hash != rec.value_hash:
+            modified.append((old, rec))
+    deleted = [baseline[k] for k in sorted(set(baseline.keys()) - seen)]
+    return added, modified, deleted
+
+
 def cmd_init(cfg: dict) -> int:
     if not IS_WINDOWS:
         print("[i] registry monitoring only runs on Windows; nothing to do here.")

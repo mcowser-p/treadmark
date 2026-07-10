@@ -23,6 +23,7 @@ least-privilege policy generation. Single binary, no agent, no daemon.
 | `src/cairn/compare.py` | Golden-baseline compare (live-vs-DB and DB-vs-DB) |
 | `src/cairn/report.py` | 7 output formats (json/ndjson/csv/sarif/md/html/txt) |
 | `src/cairn/winreg_mon.py` | Windows registry monitor (dormant on Linux) |
+| `src/cairn/winsemantic.py` | Windows footprint parsers: services (from registry), scheduled tasks (from XML), path classification — pure, testable anywhere |
 | `tests/` | pytest suite — see "Testing" below |
 | `packaging/` | Shipped default configs, rpm spec, postinstall |
 | `scripts/` | Build scripts, `container-rootfs.sh` extraction helper |
@@ -120,6 +121,9 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
   blocking (add them to attach.needs, drop continue-on-error) after a couple
   of clean releases. Org strings + License.rtf in windows/ are still
   placeholders (SETUP.md pre-publish TODO) — MSI installs, not brand-correct.
-- Windows-side semantic parsing (services, scheduled tasks, COM, firewall)
-  is unbuilt by design; the registry monitor only captures raw keys. This is
-  the obvious next Windows feature after the build pipeline is proven.
+- Windows semantic footprint: **services and scheduled tasks are now parsed**
+  (`src/cairn/winsemantic.py`; `cairn footprint` dispatches to
+  `build_model_windows` on Windows, reconstructing services from the registry
+  Services subtree and tasks from Task XML). Still unbuilt: COM registration,
+  firewall rules, and local account/group enumeration (Windows accounts live
+  in the SAM, not a readable file) — the next gaps.

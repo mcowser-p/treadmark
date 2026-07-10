@@ -576,6 +576,140 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Windows footprint model
+# ---------------------------------------------------------------------------
+
+WINDOWS_CAVEAT = (
+    "This describes what an installer wrote to disk and the registry on "
+    "Windows. It does not describe runtime behaviour, and — because Windows "
+    "accounts live in the SAM, not a readable file — it does not enumerate "
+    "local accounts/groups the installer created. Reconstructed from the file "
+    "baseline plus the registry Services subtree; run `cairn all init` before "
+    "the install so both halves are captured. Merge with runtime observation "
+    "before enforcing a policy."
+)
+
+
+def _flag_risks_windows(services, tasks) -> list[dict]:
+    """Surface the Windows install objects a reviewer should look at."""
+    risks: list[dict] = []
+    for s in services:
+        img = s.image_binary or ""
+        low = img.lower()
+        in_standard = any(x in low for x in
+                          ("\\system32\\", "\\syswow64\\", "\\program files"))
+        if img and not in_standard:
+            risks.append({"severity": "high", "kind": "service_image_nonstandard_path",
+                          "detail": f"service '{s.name}' runs {img} (outside "
+                                    "System32/Program Files)", "path": s.key_path})
+        if not s.runs_as_builtin:
+            risks.append({"severity": "medium", "kind": "service_custom_account",
+                          "detail": f"service '{s.name}' runs as {s.run_as} "
+                                    "(non-builtin account)", "path": s.key_path})
+        elif s.start_type == "auto" and s.runs_as_system:
+            risks.append({"severity": "low", "kind": "autostart_service_as_system",
+                          "detail": f"service '{s.name}' auto-starts as "
+                                    f"{s.run_as}", "path": s.key_path})
+    for t in tasks:
+        if t.runs_as_system or t.runs_elevated:
+            risks.append({"severity": "medium", "kind": "scheduled_task_elevated",
+                          "detail": f"task '{t.name}' runs as {t.run_as or '?'} "
+                                    f"(level {t.run_level or 'default'})",
+                          "path": t.source_path})
+    return risks
+
+
+def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
+    from . import winsemantic as wsem
+    from . import winreg_mon
+
+    added, modified, deleted, errors = _collect_changes(cfg)
+
+    reg_added, reg_modified, reg_deleted = [], [], []
+    registry_error = None
+    try:
+        reg_added, reg_modified, reg_deleted = winreg_mon.collect_changes(cfg)
+    except FileNotFoundError:
+        registry_error = ("no registry baseline — run `cairn all init` (not just "
+                          "`cairn files init`) so services are captured")
+
+    reg_changed = reg_added + [n for (_o, n) in reg_modified]
+    services = wsem.parse_windows_services(reg_changed)
+
+    tasks = []
+    for rec in added + [n for (_o, n, _c) in modified]:
+        if wsem.classify_windows_path(rec.path) == "scheduled_task":
+            content = _content_of(rec) or _live_content(rec.real_path or rec.path)
+            if content:
+                t = wsem.parse_scheduled_task(rec.path, content)
+                if t:
+                    tasks.append(t)
+
+    fs_by_category: dict[str, list[dict]] = {}
+    for rec in added:
+        cat = wsem.classify_windows_path(rec.path)
+        fs_by_category.setdefault(cat, []).append({
+            "path": rec.path, "size": rec.size, "sha256": rec.sha256,
+        })
+
+    risks = _flag_risks_windows(services, tasks)
+
+    db_path = cfg["db_path"]
+    conn = files_mod.open_db(db_path)
+    try:
+        meta = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM meta")}
+    finally:
+        conn.close()
+
+    return {
+        "schema_version": wsem.SCHEMA_VERSION,
+        "footprint_type": "install_time",
+        "footprint_caveat": WINDOWS_CAVEAT,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "application": app_name or "unknown",
+        "host": platform.node(),
+        "platform": platform.platform(),
+        "baseline": {
+            "db_path": db_path,
+            "db_sha256": files_mod.hash_file(db_path, "sha256"),
+            "created_at": meta.get("created_at", "unknown"),
+            "source_host": meta.get("host", "unknown"),
+            "source_os": meta.get("os", "unknown"),
+        },
+        "summary": {
+            "files_added": len(added),
+            "files_modified": len(modified),
+            "registry_values_added": len(reg_added),
+            "registry_values_modified": len(reg_modified),
+            "services": len(services),
+            "scheduled_tasks": len(tasks),
+            "risks": len(risks),
+            "scan_errors": len(errors),
+        },
+        "services": {
+            "windows_services": [asdict(s) for s in services],
+        },
+        "scheduled": {
+            "scheduled_tasks": [asdict(t) for t in tasks],
+        },
+        "filesystem": {
+            "added_by_category": fs_by_category,
+            "modified": [{"path": n.path} for (_o, n, _c) in modified],
+            "deleted": [{"path": r.path} for r in deleted],
+        },
+        "registry": {
+            "added_values": [{"key_path": r.key_path, "value_name": r.value_name}
+                             for r in reg_added],
+            "modified_values": [{"key_path": n.key_path, "value_name": n.value_name}
+                                for (_o, n) in reg_modified],
+            "note": registry_error,
+        },
+        "risks": risks,
+        "scan_errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -583,7 +717,10 @@ def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
                   report_path: Optional[str] = None,
                   quiet: bool = False) -> int:
     try:
-        model = build_model(cfg, app_name)
+        if files_mod.IS_WINDOWS:
+            model = build_model_windows(cfg, app_name)
+        else:
+            model = build_model(cfg, app_name)
     except FileNotFoundError as e:
         print(f"[!] {e}", file=sys.stderr)
         return 2
@@ -598,22 +735,17 @@ def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
             f.write(body + "\n")
         os.replace(tmp, report_path)
         if not quiet:
-            _print_summary(model, report_path)
+            if files_mod.IS_WINDOWS:
+                _print_summary_windows(model, report_path)
+            else:
+                _print_summary(model, report_path)
     else:
         print(body)
 
     return 1 if model["summary"]["files_added"] or model["summary"]["files_modified"] else 0
 
 
-def _print_summary(model: dict, path: str) -> None:
-    s = model["summary"]
-    print(f"\nInstall footprint for '{model['application']}' on {model['host']}")
-    print(f"  files:      +{s['files_added']} added, ~{s['files_modified']} modified")
-    print(f"  services:   {s['systemd_units']} systemd unit(s), {s['cron_jobs']} cron job(s)")
-    print(f"  principals: {s['users_added']} user(s), {s['groups_added']} group(s), "
-          f"{s['membership_changes']} membership change(s)")
-    print(f"  privilege:  {s['sudo_rules']} sudoers rule(s), {s['executables']} executable(s)")
-
+def _print_risks_and_footer(model: dict, path: str) -> None:
     risks = model["risks"]
     if risks:
         by_sev: dict[str, int] = {}
@@ -627,7 +759,30 @@ def _print_summary(model: dict, path: str) -> None:
                 print(f"      [{r['severity']}] {r['detail']}")
     else:
         print("  risks:      none flagged")
-
     print(f"\n  → {path}")
     print("\n  Note: install-time footprint only. Merge with runtime observation")
     print("  before enforcing a policy. See footprint_caveat in the JSON.\n")
+
+
+def _print_summary_windows(model: dict, path: str) -> None:
+    s = model["summary"]
+    print(f"\nInstall footprint for '{model['application']}' on {model['host']}")
+    print(f"  files:      +{s['files_added']} added, ~{s['files_modified']} modified")
+    print(f"  registry:   +{s['registry_values_added']} values, "
+          f"~{s['registry_values_modified']} modified")
+    print(f"  services:   {s['services']} Windows service(s), "
+          f"{s['scheduled_tasks']} scheduled task(s)")
+    if model["registry"].get("note"):
+        print(f"  [!] {model['registry']['note']}")
+    _print_risks_and_footer(model, path)
+
+
+def _print_summary(model: dict, path: str) -> None:
+    s = model["summary"]
+    print(f"\nInstall footprint for '{model['application']}' on {model['host']}")
+    print(f"  files:      +{s['files_added']} added, ~{s['files_modified']} modified")
+    print(f"  services:   {s['systemd_units']} systemd unit(s), {s['cron_jobs']} cron job(s)")
+    print(f"  principals: {s['users_added']} user(s), {s['groups_added']} group(s), "
+          f"{s['membership_changes']} membership change(s)")
+    print(f"  privilege:  {s['sudo_rules']} sudoers rule(s), {s['executables']} executable(s)")
+    _print_risks_and_footer(model, path)
