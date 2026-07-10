@@ -1,14 +1,14 @@
 # C:\ProgramData\Cairn\cairn.yaml — default config for Windows, edit before
 # first run.
 #
-# This is the FILE half of cairn on Windows. The REGISTRY half (autoruns,
-# services, Winlogon, policies) is monitored separately by `cairn registry`,
-# which ships its own sensible default key list — run both:
+# One config, both halves. `cairn all` monitors the FILE surface (paths
+# below) AND the REGISTRY surface (registry_keys below, which includes
+# Windows services) from this single file:
 #   cairn all init   --config C:\ProgramData\Cairn\cairn.yaml
 #   cairn all scan   --config C:\ProgramData\Cairn\cairn.yaml
 #
-# The watch set below mirrors the Linux config's philosophy: cover the
-# executable and persistence surfaces an attacker would touch, exclude the
+# The watch set mirrors the Linux config's philosophy: cover the executable,
+# registry, and persistence surfaces an attacker would touch; exclude the
 # high-churn caches that would drown the signal.
 
 db_path: C:\ProgramData\Cairn\baseline.db
@@ -93,6 +93,47 @@ exclude_extensions:
 follow_symlinks: false
 hash_algorithm: sha256
 max_file_size_mb: 500
+
+# ---------------------------------------------------------------------------
+# Registry surface — monitored by `cairn registry` / `cairn all`. These are
+# the persistence, service, and auth keys an attacker touches. Declared here
+# (rather than left to the built-in defaults) so you can see and tune them.
+# ---------------------------------------------------------------------------
+registry_keys:
+  # --- Autoruns: the most-targeted persistence spots ---
+  - HKLM\Software\Microsoft\Windows\CurrentVersion\Run
+  - HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce
+  - HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnceEx
+  - HKLM\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run
+  - HKLM\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnce
+  - HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+  - HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce
+
+  # --- Windows services: each service's config (ImagePath, Start, ObjectName
+  #     = the run-as identity) lives here. This is how services are monitored,
+  #     and what `cairn footprint` reconstructs into service objects. ---
+  - HKLM\System\CurrentControlSet\Services
+
+  # --- Logon / injection hijacks ---
+  - HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon
+  - HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options
+  - HKLM\Software\Microsoft\Windows NT\CurrentVersion\Windows          # AppInit_DLLs
+  - HKLM\Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows
+  - HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects
+
+  # --- Policy and authentication ---
+  - HKLM\Software\Microsoft\Windows\CurrentVersion\Policies
+  - HKLM\Software\Policies
+  - HKLM\System\CurrentControlSet\Control\Lsa
+  - HKLM\System\CurrentControlSet\Control\SecurityProviders
+
+registry_recursive: true
+# The Services subtree is deep and wide; bound the recursion so a scan stays
+# fast. Depth 3 reaches each service's key plus its Parameters — enough for
+# identity (ImagePath/Start/ObjectName) without walking every nested blob.
+registry_max_depth: 3
+registry_exclude: []          # substring match against the full key path
+registry_skip_volatile: true  # don't flag perf-counter / volatile churn
 
 # Store gzipped content of small text files in the baseline so `cairn files
 # scan` shows unified diffs of changed configs. On Windows the baseline DB is
