@@ -220,6 +220,46 @@ def test_flag_risks_windows():
     assert kinds["scheduled_task_elevated"] == "medium"
 
 
+def test_systemroot_relative_driver_image_is_standard():
+    from cairn.footprint import _flag_risks_windows, _image_in_standard_path
+
+    # All SCM notations that resolve against %SystemRoot% are standard.
+    assert _image_in_standard_path(r"system32\drivers\wd\KslD.sys")
+    assert _image_in_standard_path(r"\SystemRoot\system32\drivers\x.sys")
+    assert _image_in_standard_path(r"%SystemRoot%\system32\drivers\x.sys")
+    assert _image_in_standard_path(r"%windir%\system32\svchost.exe")
+    assert _image_in_standard_path(r"\??\C:\Program Files\App\drv.sys")
+    assert _image_in_standard_path(r"C:\Windows\System32\svchost.exe")
+    # Genuinely odd locations still fail.
+    assert not _image_in_standard_path(r"C:\Users\Public\evil.exe")
+    assert not _image_in_standard_path(r"C:\Temp\x.sys")
+    assert not _image_in_standard_path("")
+
+    # The live false positive: Defender's KslD driver, relative ImagePath.
+    ksld = ws.WindowsService(name="KslD", key_path="k", service_type=1,
+                             image_path=r"system32\drivers\wd\KslD.sys",
+                             start_type="manual", run_as="LocalSystem")
+    risks = _flag_risks_windows([ksld], [])
+    assert not [r for r in risks if r["kind"] == "service_image_nonstandard_path"]
+
+
+def test_preexisting_driver_is_modified_not_installed():
+    from cairn.footprint import _flag_risks_windows
+
+    ksld = ws.WindowsService(name="KslD", key_path="k", service_type=1,
+                             image_path=r"system32\drivers\wd\KslD.sys",
+                             run_as="LocalSystem")
+    # Key existed at baseline (only a value changed) → touched, medium.
+    risks = _flag_risks_windows([ksld], [], (), preexisting_services={"ksld"})
+    kinds = {r["kind"]: r["severity"] for r in risks}
+    assert kinds.get("kernel_driver_modified") == "medium"
+    assert "kernel_driver_installed" not in kinds
+    # Default (no preexisting info) keeps the old behavior: installed, high.
+    risks = _flag_risks_windows([ksld], [])
+    kinds = {r["kind"]: r["severity"] for r in risks}
+    assert kinds.get("kernel_driver_installed") == "high"
+
+
 def test_kernel_driver_risk():
     from cairn.footprint import _flag_risks_windows
     # A .sys image (like Datadog's ddnpm) and a Type=1 service both flag high.

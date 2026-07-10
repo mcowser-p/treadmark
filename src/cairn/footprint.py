@@ -591,8 +591,37 @@ WINDOWS_CAVEAT = (
 )
 
 
-def _flag_risks_windows(services, tasks, added_files=()) -> list[dict]:
-    """Surface the Windows install objects a reviewer should look at."""
+def _image_in_standard_path(image_binary: str) -> bool:
+    """True if a service image lives in a standard system location.
+
+    The SCM accepts several equivalent notations that all resolve against
+    %SystemRoot%: NT object paths (`\\??\\C:\\...`), `\\SystemRoot\\` and
+    `%SystemRoot%`/`%windir%` prefixes, and — the common form for kernel
+    drivers — paths RELATIVE to SystemRoot (`system32\\drivers\\foo.sys`).
+    Normalize before deciding, or relative driver images false-positive as
+    "outside System32" (seen live: Defender's KslD.sys)."""
+    low = (image_binary or "").lower()
+    if low.startswith("\\??\\"):
+        low = low[4:]
+    for pre in ("%systemroot%\\", "\\systemroot\\", "%windir%\\"):
+        if low.startswith(pre):
+            low = low[len(pre):]
+            break
+    if low.startswith(("system32\\", "syswow64\\")):
+        return True
+    return any(x in low for x in
+               ("\\system32\\", "\\syswow64\\", "\\program files"))
+
+
+def _flag_risks_windows(services, tasks, added_files=(),
+                        preexisting_services=frozenset()) -> list[dict]:
+    """Surface the Windows install objects a reviewer should look at.
+
+    `preexisting_services` — lowercased names of services whose registry
+    keys existed at baseline (only values under them changed). A kernel
+    driver in that set was TOUCHED, not installed: background security
+    agents rewrite values on their own drivers, and calling that an
+    install would be wrong twice (wrong actor, wrong severity)."""
     from . import winsemantic as wsem
     risks: list[dict] = []
 
@@ -614,14 +643,17 @@ def _flag_risks_windows(services, tasks, added_files=()) -> list[dict]:
 
     for s in services:
         if s.is_driver:
-            risks.append({"severity": "high", "kind": "kernel_driver_installed",
-                          "detail": f"service '{s.name}' installs a kernel driver "
-                                    f"({s.image_binary})", "path": s.key_path})
+            if s.name.lower() in preexisting_services:
+                risks.append({"severity": "medium", "kind": "kernel_driver_modified",
+                              "detail": f"pre-existing kernel driver service "
+                                        f"'{s.name}' was modified "
+                                        f"({s.image_binary})", "path": s.key_path})
+            else:
+                risks.append({"severity": "high", "kind": "kernel_driver_installed",
+                              "detail": f"service '{s.name}' installs a kernel driver "
+                                        f"({s.image_binary})", "path": s.key_path})
         img = s.image_binary or ""
-        low = img.lower()
-        in_standard = any(x in low for x in
-                          ("\\system32\\", "\\syswow64\\", "\\program files"))
-        if img and not in_standard:
+        if img and not _image_in_standard_path(img):
             risks.append({"severity": "high", "kind": "service_image_nonstandard_path",
                           "detail": f"service '{s.name}' runs {img} (outside "
                                     "System32/Program Files)", "path": s.key_path})
@@ -764,6 +796,11 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
     # change. Genuinely new services, like an installed agent, do appear.)
     reg_changed = reg_added + [n for (_o, n) in reg_modified]
     touched = {n for n in (wsem.service_name_from_key(r.key_path) for r in reg_changed) if n}
+    # A service whose key gained NO new values (only modifications) existed
+    # at baseline — it was touched, not installed. Risks report it as such.
+    added_names = {n.lower() for n in
+                   (wsem.service_name_from_key(r.key_path) for r in reg_added) if n}
+    preexisting = {n.lower() for n in touched} - added_names
     full_records = []
     for name in sorted(touched):
         try:
@@ -792,7 +829,8 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
             "owner": rec.owner, "acl": rec.acl,
         })
 
-    risks = _flag_risks_windows(services, tasks, added)
+    risks = _flag_risks_windows(services, tasks, added,
+                                preexisting_services=preexisting)
     hints = _derive_access_hints_windows(services, tasks, added, modified)
 
     db_path = cfg["db_path"]
