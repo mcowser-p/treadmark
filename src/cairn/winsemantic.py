@@ -274,6 +274,54 @@ def classify_windows_path(path: str) -> str:
     return "other"
 
 
+# ---------------------------------------------------------------------------
+# ACL interpretation — the Windows analog of "world-writable" on Linux
+# ---------------------------------------------------------------------------
+# cairn.files.get_acl encodes each ACE as "<type>:<flags>:<mask_hex8>:<principal>"
+# joined by ';'. ACE type 0 == ACCESS_ALLOWED.
+
+# Broad principals whose write access is a red flag on a program/system file.
+_BROAD_PRINCIPALS = (
+    "everyone",
+    "builtin\\users",
+    "\\users",
+    "nt authority\\authenticated users",
+    "authenticated users",
+)
+
+# Write-specific access-mask bits only (NOT FILE_ALL_ACCESS, which also sets
+# READ_CONTROL/SYNCHRONIZE that read-only ACLs carry — a full-access mask is
+# still caught via its FILE_WRITE_DATA bits below):
+#   FILE_WRITE_DATA 0x2, FILE_APPEND_DATA 0x4, FILE_WRITE_EA 0x10,
+#   FILE_WRITE_ATTRIBUTES 0x100, DELETE 0x10000, WRITE_DAC 0x40000,
+#   WRITE_OWNER 0x80000, GENERIC_WRITE 0x40000000, GENERIC_ALL 0x10000000.
+_WRITE_MASK = (0x00000002 | 0x00000004 | 0x00000010 | 0x00000100 |
+               0x00010000 | 0x00040000 | 0x00080000 | 0x40000000 | 0x10000000)
+
+
+def acl_permissive_principal(acl: Optional[str]) -> Optional[str]:
+    """If the DACL grants write/modify/full to a broad principal (Everyone,
+    Users, Authenticated Users), return that principal; else None. This is the
+    Windows equivalent of a world-writable file."""
+    if not acl:
+        return None
+    for ace in acl.split(";"):
+        parts = ace.split(":")
+        if len(parts) < 4:
+            continue
+        ace_type, _flags, mask_hex, principal = parts[0], parts[1], parts[2], ":".join(parts[3:])
+        if ace_type != "0":                 # only ACCESS_ALLOWED grants access
+            continue
+        try:
+            mask = int(mask_hex, 16)
+        except ValueError:
+            continue
+        p = principal.strip().lower()
+        if (mask & _WRITE_MASK) and any(p == b or p.endswith(b) for b in _BROAD_PRINCIPALS):
+            return principal
+    return None
+
+
 # Groups whose membership confers meaningful privilege on Windows.
 PRIVILEGED_GROUPS = {
     "administrators", "domain admins", "enterprise admins",

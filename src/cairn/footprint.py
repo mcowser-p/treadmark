@@ -590,9 +590,27 @@ WINDOWS_CAVEAT = (
 )
 
 
-def _flag_risks_windows(services, tasks) -> list[dict]:
+def _flag_risks_windows(services, tasks, added_files=()) -> list[dict]:
     """Surface the Windows install objects a reviewer should look at."""
+    from . import winsemantic as wsem
     risks: list[dict] = []
+
+    # Permissive ACLs: a new file writable by Everyone/Users is the Windows
+    # world-writable analog. High for a program/system binary, medium else.
+    for rec in added_files:
+        principal = wsem.acl_permissive_principal(getattr(rec, "acl", None))
+        if not principal:
+            continue
+        low = (rec.path or "").lower()
+        privileged = (low.endswith((".exe", ".dll", ".sys")) or
+                      "\\program files" in low or "\\system32" in low)
+        risks.append({
+            "severity": "high" if privileged else "medium",
+            "kind": "world_writable_file",
+            "detail": f"{rec.path} grants write to '{principal}'",
+            "path": rec.path,
+        })
+
     for s in services:
         img = s.image_binary or ""
         low = img.lower()
@@ -650,9 +668,12 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         cat = wsem.classify_windows_path(rec.path)
         fs_by_category.setdefault(cat, []).append({
             "path": rec.path, "size": rec.size, "sha256": rec.sha256,
+            # Windows permission model: the file owner (SID/name) and the DACL
+            # (access-control entries), the analog of Linux mode+owner+group.
+            "owner": rec.owner, "acl": rec.acl,
         })
 
-    risks = _flag_risks_windows(services, tasks)
+    risks = _flag_risks_windows(services, tasks, added)
 
     db_path = cfg["db_path"]
     conn = files_mod.open_db(db_path)
@@ -694,7 +715,8 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         },
         "filesystem": {
             "added_by_category": fs_by_category,
-            "modified": [{"path": n.path} for (_o, n, _c) in modified],
+            "modified": [{"path": n.path, "owner": n.owner, "acl": n.acl}
+                         for (_o, n, _c) in modified],
             "deleted": [{"path": r.path} for r in deleted],
         },
         "registry": {

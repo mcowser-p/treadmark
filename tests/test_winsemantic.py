@@ -188,3 +188,47 @@ def test_flag_risks_windows():
     assert kinds["service_custom_account"] == "medium"
     assert kinds["autostart_service_as_system"] == "low"
     assert kinds["scheduled_task_elevated"] == "medium"
+
+
+# ---------------------------------------------------------------------------
+# ACL interpretation — world-writable analog
+# ---------------------------------------------------------------------------
+
+def test_acl_permissive_principal():
+    f = ws.acl_permissive_principal
+    # Everyone with GENERIC_WRITE (0x40000000), ACCESS_ALLOWED (type 0)
+    assert f("0:0:40000000:Everyone") == "Everyone"
+    # BUILTIN\Users with FILE_ALL_ACCESS
+    assert f("0:0:001f01ff:BUILTIN\\Users") == "BUILTIN\\Users"
+    # Read-only (0x120089) for Everyone → not permissive
+    assert f("0:0:00120089:Everyone") is None
+    # Write, but for Administrators (not a broad principal) → not flagged
+    assert f("0:0:40000000:BUILTIN\\Administrators") is None
+    # ACCESS_DENIED (type 1) write for Everyone → not a grant
+    assert f("1:0:40000000:Everyone") is None
+    assert f(None) is None
+    # realistic multi-ACE string: SYSTEM full + Everyone write
+    acl = "0:0:001f01ff:NT AUTHORITY\\SYSTEM;0:0:40000000:Everyone"
+    assert f(acl) == "Everyone"
+
+
+def test_flag_windows_world_writable_file():
+    from cairn.footprint import _flag_risks_windows
+    from dataclasses import dataclass
+
+    @dataclass
+    class FR:
+        path: str
+        acl: str
+
+    added = [
+        FR(r"C:\Program Files\App\app.exe", "0:0:40000000:Everyone"),   # high
+        FR(r"C:\ProgramData\App\data.txt", "0:0:40000000:BUILTIN\\Users"),  # medium
+        FR(r"C:\Program Files\App\readme.txt", "0:0:00120089:Everyone"),   # read-only → none
+    ]
+    risks = _flag_risks_windows([], [], added)
+    ww = [r for r in risks if r["kind"] == "world_writable_file"]
+    assert len(ww) == 2
+    sev = {r["path"]: r["severity"] for r in ww}
+    assert sev[r"C:\Program Files\App\app.exe"] == "high"
+    assert sev[r"C:\ProgramData\App\data.txt"] == "medium"
