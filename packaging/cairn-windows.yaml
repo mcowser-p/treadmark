@@ -25,12 +25,23 @@ paths:
   - C:\Windows\System32\Tasks
   - C:\Windows\Tasks
 
+  # Scheduled-task DEFINITIONS also register under drivers; the two Tasks
+  # dirs above hold the XML. (Do NOT add all of System32 — see note below.)
+
   # Startup-folder persistence (per-machine and the shell startup tree)
   - C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup
 
-  # Uncomment to widen coverage (larger baseline, slower scans):
-  # - C:\Windows\System32          # core OS binaries — big, mostly static
-  # - C:\Users                     # per-user profiles: rc-equivalent + startup
+  # --- Do you need C:\Windows\System32? Almost never in full. ---
+  # It's tens of thousands of OS-owned files that churn on every Windows
+  # Update — the Windows equivalent of watching all of /usr/lib on Linux.
+  # The security-relevant parts are already covered above as targeted subdirs
+  # (drivers\etc = hosts, Tasks = scheduled tasks). For driver-implant
+  # detection, watch just the driver dir, not the whole tree:
+  # - C:\Windows\System32\drivers      # .sys driver files (targeted, ~hundreds)
+  #
+  # Wider coverage (bigger baseline, slower scans) — uncomment deliberately:
+  # - C:\Windows\System32              # ALL core OS binaries — big, update-churny
+  # - C:\Users                         # per-user profiles: rc-equivalent + startup
 
 exclude:
   # --- High-churn OS/state that changes on its own ---
@@ -43,13 +54,25 @@ exclude:
   - \Prefetch\
   - \WinSxS\                           # component store: enormous, churns on updates
 
-  # --- Program Files churn (self-updaters, caches) ---
+  # --- Program Files churn: self-updaters, caches, and app runtime state.
+  #     These are the count-inflaters on a real box — trim them hard so the
+  #     Program Files baseline stays about installed binaries, not scratch. ---
   - \Update\
   - \Updates\
   - \cache\
   - \Cache\
   - \logs\
   - \Logs\
+  - \Crashpad\                         # Chromium/Electron crash handler
+  - \GPUCache\                         # Electron/browser render caches
+  - \Code Cache\
+  - \Service Worker\
+  - \blob_storage\
+  - node_modules                       # bundled JS dependency trees (huge)
+  - __pycache__                        # Python bytecode
+  - \NativeImages                      # .NET NGEN cache (regenerated, not authored)
+  - \.git\                             # repos vendored into an install dir
+  - \telemetry\
 
   # --- Package / installer bookkeeping ---
   - C:\ProgramData\Package Cache\      # MSI/bootstrapper cache
@@ -62,6 +85,10 @@ exclude_extensions:
   - .evtx       # event logs
   - .pf         # prefetch
   - .dmp        # crash dumps
+  - .pdb        # debug symbols — large, high-count, not a tamper target
+  - .mui        # localized resource DLLs — many, static, low signal
+  - .bak
+  - .old
 
 follow_symlinks: false
 hash_algorithm: sha256
