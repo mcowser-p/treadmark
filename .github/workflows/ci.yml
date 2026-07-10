@@ -95,8 +95,9 @@ jobs:
           path: footprint-*.json
           if-no-files-found: ignore
 
-  # Build the Windows exe + MSI, then smoke-test the MSI on a real Windows
-  # runner (install → files+registry cycle → uninstall). Blocking on PRs.
+  # Build the Windows exe + MSI and smoke-test it in ONE job (install →
+  # files+registry cycle → uninstall). One runner, not two; WiX + pip cached.
+  # Blocking on PRs.
   windows:
     needs: test
     runs-on: windows-latest
@@ -105,10 +106,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+      - name: cache wix toolset
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.dotnet\tools
+            ~\.wix
+          key: wix-5.0.2
       - shell: pwsh
         run: scripts\build-windows.ps1
-      - shell: pwsh
-        run: Get-ChildItem dist
       - uses: actions/upload-artifact@v4
         with:
           name: dist-windows
@@ -116,15 +123,6 @@ jobs:
             dist/cairn-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
-
-  smoke-windows:
-    needs: windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-windows
-          path: dist/
-      - shell: pwsh
+      - name: smoke-test the msi
+        shell: pwsh
         run: scripts\smoke-test.ps1

@@ -58,11 +58,13 @@ Write-Host ">>> msi"
 # WiX v7 gates use behind the OSMF EULA (error WIX7015). Pin to v5, which is
 # schema-compatible with this .wxs and has no EULA gate. Pin the extensions to
 # the same major so they resolve against the pinned toolset.
+# Put the global-tools dir on PATH first, so a CI cache-restored wix is found
+# and we skip the ~2-minute reinstall.
+$env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     Write-Host "  installing wix v5..."
     dotnet tool install --global wix --version 5.0.2
     if ($LASTEXITCODE -ne 0) { throw "wix tool install failed" }
-    $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
 }
 
 wix extension add -g WixToolset.UI.wixext/5.0.2

@@ -164,16 +164,19 @@ jobs:
   # =========================================================================
   # 2b. Build Windows artifacts at the new version, then smoke-test the MSI.
   #
-  # SOAK: both jobs are continue-on-error while the Windows pipeline is young
+  # SOAK: this job is continue-on-error while the Windows pipeline is young
   # — a Windows flake must not hold Linux release artifacts hostage. The
   # attach job downloads ALL artifacts, so Windows artifacts attach
   # opportunistically when green and are simply absent when not.
-  # To flip to BLOCKING once proven: drop the two `continue-on-error` lines
-  # and add `windows, smoke-windows` to attach.needs below.
+  # To flip to BLOCKING once proven: drop the `continue-on-error` line and
+  # add `windows` to attach.needs below.
   #
   # Org strings + License.rtf in windows/ are still placeholders (SETUP.md
   # pre-publish TODO) — the MSI installs but isn't brand-correct yet.
   # =========================================================================
+  # Build the exe + MSI and smoke-test it in ONE job — a second windows-latest
+  # runner (spin-up + checkout + artifact round-trip) is far slower than the
+  # build itself. WiX tool and pip are cached across runs.
   windows:
     needs: release
     if: needs.release.outputs.released == 'true'
@@ -186,6 +189,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+      - name: cache wix toolset
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.dotnet\tools
+            ~\.wix
+          key: wix-5.0.2
       - name: build binary + msi
         shell: pwsh
         run: scripts\build-windows.ps1
@@ -196,30 +207,17 @@ jobs:
             dist/cairn-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
-
-  smoke-windows:
-    needs: windows
-    if: needs.release.outputs.released == 'true'
-    continue-on-error: true   # SOAK — see note above
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.tag }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-x86_64
-          path: dist/
-      - shell: pwsh
+      - name: smoke-test the msi
+        shell: pwsh
         run: scripts\smoke-test.ps1
 
   # =========================================================================
   # 3. Attach all artifacts to the GitHub Release semantic-release created.
   # =========================================================================
   attach:
-    # SOAK: 'windows'/'smoke-windows' intentionally NOT in needs — Windows is
-    # continue-on-error, so gating attach on it would defeat the soak. Add
-    # them here (and drop their continue-on-error) once Windows is proven.
+    # SOAK: 'windows' intentionally NOT in needs — it's continue-on-error, so
+    # gating attach on it would defeat the soak. Add it here (and drop its
+    # continue-on-error) once Windows is proven.
     needs: [release, linux, smoke]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
