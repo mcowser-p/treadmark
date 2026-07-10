@@ -65,6 +65,10 @@ addopts = "-q"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
+# Keep the package's __version__ (what `cairn --version` prints) in lockstep
+# with the released version — otherwise the shipped binary reports a stale
+# number (the PyInstaller build can't read dist metadata at runtime).
+version_variables = ["src/cairn/__init__.py:__version__"]
 branch = "main"
 build_command = ""                       # we build artifacts in a separate job
 upload_to_pypi = false                   # we ship .deb/.rpm/.msi, not a PyPI package
