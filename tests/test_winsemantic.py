@@ -95,6 +95,12 @@ def test_non_service_records_ignored():
     assert ws.parse_windows_services(recs) == []
 
 
+def test_service_name_from_key():
+    assert ws.service_name_from_key(SERVICES + r"\W3SVC") == "W3SVC"
+    assert ws.service_name_from_key(SERVICES + r"\BITS\Parameters") is None
+    assert ws.service_name_from_key(r"HKLM\Software\Foo") is None
+
+
 # ---------------------------------------------------------------------------
 # Scheduled tasks
 # ---------------------------------------------------------------------------

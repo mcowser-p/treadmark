@@ -125,6 +125,12 @@ def service_image_binary(image_path: Optional[str]) -> Optional[str]:
     return s.split(" ")[0]
 
 
+def service_name_from_key(key_path: str) -> Optional[str]:
+    """If key_path is a service key (…\\Services\\<name>), return <name>."""
+    m = _SERVICES_KEY.search(key_path or "")
+    return m.group("name") if m else None
+
+
 def parse_windows_services(reg_records) -> list[WindowsService]:
     """Reconstruct WindowsService objects from registry records under
     ...\\Services\\<name>. `reg_records` is any iterable of objects with

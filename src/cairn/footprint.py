@@ -651,8 +651,24 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         registry_error = ("no registry baseline — run `cairn all init` (not just "
                           "`cairn files init`) so services are captured")
 
+    # A service touched by the install shows up in the diff via whatever value
+    # changed (often just Start). Reconstruct each touched service from its
+    # FULL current config by re-reading its key live — otherwise a service
+    # whose only changed value was Start comes back with a null ImagePath/
+    # ObjectName. (Note: a service already registered before the baseline —
+    # e.g. IIS's W3SVC pre-staged on some images — won't appear at all; the
+    # footprint is a diff, so a pre-existing, unchanged service is not a
+    # change. Genuinely new services, like an installed agent, do appear.)
     reg_changed = reg_added + [n for (_o, n) in reg_modified]
-    services = wsem.parse_windows_services(reg_changed)
+    touched = {n for n in (wsem.service_name_from_key(r.key_path) for r in reg_changed) if n}
+    full_records = []
+    for name in sorted(touched):
+        try:
+            full_records.extend(winreg_mon.walk_key(
+                rf"HKLM\System\CurrentControlSet\Services\{name}", cfg))
+        except Exception:
+            pass
+    services = wsem.parse_windows_services(full_records or reg_changed)
 
     tasks = []
     for rec in added + [n for (_o, n, _c) in modified]:
