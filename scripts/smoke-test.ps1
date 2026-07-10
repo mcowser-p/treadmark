@@ -140,36 +140,54 @@ $fpDb  = "$env:TEMP\cairn-fp.db"
 & $exe all init --config $fpCfg
 if ($LASTEXITCODE -ne 0) { Fail "footprint baseline (all init) failed" }
 
-Step "footprint: install IIS (Web-Server role)"
+# Example footprint models are written to the repo root so CI can upload them
+# as release reference assets (named example-* so the attach job includes them
+# and they never collide with the per-run debug footprints).
+$iisFp = "example-footprint-windows-iis.json"
+$ddFp  = "example-footprint-windows-datadog.json"
+
+Step "footprint(iis): install the Web-Server role"
 Import-Module ServerManager -ErrorAction SilentlyContinue
 Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
 
-Step "footprint: install Datadog agent via winget (config-less)"
+Step "footprint(iis): capture and verify"
+& $exe footprint --config $fpCfg --app iis --report $iisFp
+if ($LASTEXITCODE -ne 1) { Fail "iis footprint exited $LASTEXITCODE, expected 1" }
+$fp = Get-Content $iisFp -Raw
+# IIS registers W3SVC (WWW Publishing) + WAS — reconstructed from the registry
+# Services subtree, with their run-as identity.
+if ($fp -notmatch '"name": "W3SVC"') { Fail "footprint missed the IIS W3SVC service" }
+if ($fp -notmatch '"schema_version": "1.0-windows"') { Fail "not a Windows footprint model" }
+if ($fp -notmatch '"run_as"') { Fail "service run-as identity not captured" }
+Write-Host "    captured IIS services → $iisFp"
+
+# Re-baseline (IIS now part of the baseline) so the Datadog footprint is
+# Datadog-only, not IIS+Datadog.
+Step "footprint(datadog): re-baseline, then install via winget (config-less)"
+& $exe all init --config $fpCfg --force | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail "footprint re-baseline failed" }
 $ddOk = $true
 try {
     winget install --id Datadog.Agent --silent --accept-package-agreements `
         --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { $ddOk = $false }
 } catch { $ddOk = $false }
-if (-not $ddOk) { Write-Host "    [i] Datadog winget install unavailable/failed — IIS still covers the footprint" }
 
-Step "footprint: capture and verify the Windows model"
-& $exe footprint --config $fpCfg --app windows-services --report fp.json
-$rc = $LASTEXITCODE
-if ($rc -ne 1) { Fail "footprint exited $rc, expected 1 (changes present)" }
-$fp = Get-Content fp.json -Raw
-# IIS registers the W3SVC (WWW Publishing) and WAS services — the parser must
-# reconstruct them from the registry Services subtree.
-if ($fp -notmatch '"name": "W3SVC"') { Fail "footprint missed the IIS W3SVC service" }
-if ($fp -notmatch '"schema_version": "1.0-windows"') { Fail "not a Windows footprint model" }
-if ($fp -notmatch '"run_as"') { Fail "service run-as identity not captured" }
-Write-Host "    Windows footprint captured IIS services"
-if ($ddOk -and ($fp -match 'Datadog')) { Write-Host "    Datadog service captured too" }
+if ($ddOk) {
+    Step "footprint(datadog): capture"
+    & $exe footprint --config $fpCfg --app datadog --report $ddFp
+    if ($LASTEXITCODE -eq 1 -and (Select-String -Path $ddFp -Pattern 'Datadog' -Quiet)) {
+        Write-Host "    captured Datadog service → $ddFp"
+    } else {
+        Write-Host "    [i] Datadog install produced no footprint delta — skipping example"
+        Remove-Item $ddFp -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "    [i] Datadog winget install unavailable/failed — IIS example still produced"
+}
 
-# Show what the installs registered (the point of the exercise).
-Step "footprint: what the installs registered"
-& $exe footprint --config $fpCfg --app windows-services --report fp.json | Out-Null
-Get-Content fp.json -Raw | Select-String -Pattern '"services":|"name":|"run_as":|"start_type":' | Select-Object -First 20
+Step "footprint: what IIS registered"
+Get-Content $iisFp -Raw | Select-String -Pattern '"services":|"name":|"run_as":|"start_type":' | Select-Object -First 20
 
 # ---------------------------------------------------------------------------
 # 5. Uninstall — exe removed, operator config PRESERVED

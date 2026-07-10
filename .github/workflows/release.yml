@@ -160,6 +160,18 @@ jobs:
           name: footprint-${{ matrix.name }}-${{ matrix.arch }}
           path: footprint-*.json
           if-no-files-found: ignore
+      # Keep the AlmaLinux httpd footprint as a release reference asset (one
+      # leg only, distinctly named so it attaches without colliding with the
+      # per-run debug footprints above).
+      - name: httpd footprint as release example
+        if: matrix.image == 'almalinux:10' && matrix.arch == 'x86_64'
+        run: cp footprint-apache.json example-footprint-linux-httpd.json
+      - uses: actions/upload-artifact@v4
+        if: matrix.image == 'almalinux:10' && matrix.arch == 'x86_64'
+        with:
+          name: example-footprint-linux
+          path: example-footprint-linux-httpd.json
+          if-no-files-found: ignore
 
   # =========================================================================
   # 2b. Build Windows artifacts at the new version, then smoke-test the MSI.
@@ -210,6 +222,15 @@ jobs:
       - name: smoke-test the msi
         shell: pwsh
         run: scripts\smoke-test.ps1
+      # Sample Windows footprint models (IIS, and Datadog if winget worked) —
+      # attached to the release as reference output. `if: always()` so they
+      # upload even if a later smoke step fails.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-footprints-windows
+          path: example-footprint-windows-*.json
+          if-no-files-found: ignore
 
   # =========================================================================
   # 3. Attach all artifacts to the GitHub Release semantic-release created.
