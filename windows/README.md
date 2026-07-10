@@ -41,12 +41,12 @@ cairn --version                                  # should print version
 Test-Path "$env:ProgramData\Cairn\cairn.yaml"    # should be True
 Test-Path "$env:ProgramFiles\Cairn\cairn.exe"    # should be True
 
-# Build the baseline + a manual scan:
-cairn files init --config "$env:ProgramData\Cairn\cairn.yaml"
-cairn files scan --config "$env:ProgramData\Cairn\cairn.yaml"
+# Build the baseline + a manual scan (files AND registry — `all` runs both):
+cairn all init --config "$env:ProgramData\Cairn\cairn.yaml"
+cairn all scan --config "$env:ProgramData\Cairn\cairn.yaml"
 
-# (Optional) register the hourly scheduled task:
-& "$env:ProgramFiles\Cairn\examples\register-cairn-task.ps1"
+# Scheduling is a manual ops decision — register an hourly scan yourself, e.g.:
+#   schtasks /create /tn "Cairn scan" /tr "cairn all scan --config C:\ProgramData\Cairn\cairn.yaml" /sc hourly /ru SYSTEM
 
 # Uninstall:
 msiexec /x cairn-0.2.0.msi /qb

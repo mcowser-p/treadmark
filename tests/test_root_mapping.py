@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
+
+import pytest
 
 from cairn import files
 
@@ -43,6 +46,8 @@ def test_to_real_and_round_trip():
     assert files.to_real("/etc/passwd", "") == "/etc/passwd"
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="uses a Linux /etc-style rootfs fixture")
 def test_cli_root_flag_stores_logical_paths(run_cli, linux_rootfs, rootfs_config):
     root = linux_rootfs()
     cfg_path, cfg = rootfs_config()

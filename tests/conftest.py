@@ -174,8 +174,15 @@ def install_app(root: Path, *, setuid: bool = True) -> None:
 @pytest.fixture
 def linux_rootfs(tmp_path):
     """Factory returning a clean fixture rootfs. Call install_app() on it to
-    simulate the application install."""
+    simulate the application install.
+
+    Self-guards on Windows: the fixture builds a Linux /etc-style tree and
+    relies on POSIX mode bits (setuid), so any test using it must be
+    Linux/macOS-only. Skipping here means a new test that forgets its own
+    skipif still can't silently misbehave on a Windows runner."""
     def _make(name="rootfs"):
+        if sys.platform == "win32":
+            pytest.skip("linux_rootfs fixture builds a POSIX rootfs")
         root = tmp_path / name
         build_clean_rootfs(root)
         return root
