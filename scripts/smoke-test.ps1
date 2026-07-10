@@ -78,7 +78,11 @@ if ($report -notmatch '"has_drift": true') { Fail "report lacks has_drift=true" 
 if ($report -notmatch 'cairn-smoke-drift') { Fail "planted file not reported" }
 
 Step "accept the drift, rescan expects exit 0"
-& $exe files update --config $smokeCfg --accept $drift | Out-Null
+# Accept the whole watch dir, not just the planted file: creating a file
+# bumps the parent directory's mtime, so the dir itself also shows as
+# modified. --accept on a directory covers the dir record and everything
+# under it.
+& $exe files update --config $smokeCfg --accept $watch | Out-Null
 & $exe files scan --config $smokeCfg | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "post-accept scan exited $LASTEXITCODE" }
 Remove-Item -Recurse -Force $watch, $smokeDb, $smokeCfg -ErrorAction SilentlyContinue
