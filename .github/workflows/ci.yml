@@ -18,18 +18,27 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # 3.9 is the floor from pyproject's requires-python; 3.13 the ceiling.
+        os: [ubuntu-latest]
         python-version: ['3.9', '3.12', '3.13']
+        # Windows runs the suite once (the Windows-only registry tests only
+        # execute here); pywin32 comes via the `windows` extra.
+        include:
+          - os: windows-latest
+            python-version: '3.12'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
+      - name: install windows extra
+        if: runner.os == 'Windows'
+        run: pip install -e ".[windows]"
       - run: pytest
 
   linux:
@@ -86,17 +95,36 @@ jobs:
           path: footprint-*.json
           if-no-files-found: ignore
 
-  # Windows builds are disabled for the Linux-only release line.
-  # Re-enable: uncomment this job (and the matching one in release.yml,
-  # plus restore 'windows' in release.yml's attach.needs).
-  # windows:
-  #   runs-on: windows-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-python@v5
-  #       with:
-  #         python-version: '3.12'
-  #     - shell: pwsh
-  #       run: scripts\build-windows.ps1
-  #     - shell: pwsh
-  #       run: Get-ChildItem dist
+  # Build the Windows exe + MSI, then smoke-test the MSI on a real Windows
+  # runner (install → files+registry cycle → uninstall). Blocking on PRs.
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: pwsh
+        run: scripts\build-windows.ps1
+      - shell: pwsh
+        run: Get-ChildItem dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: |
+            dist/cairn-windows-x86_64.exe
+            dist/*.msi
+          if-no-files-found: error
+
+  smoke-windows:
+    needs: windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/
+      - shell: pwsh
+        run: scripts\smoke-test.ps1
