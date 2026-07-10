@@ -177,9 +177,15 @@ The JSON is the interface. A reasonable prompt shape:
 
 The last sentence matters. The install tree is the thing most likely to get over-granted, because it's the biggest section of the document and the easiest to hand-wave into "the app probably needs all of this."
 
+## Windows
+
+Windows services (reconstructed from the registry `Services` subtree) and scheduled tasks (parsed from their Task Scheduler XML) are extracted as semantic objects, the same way systemd units are on Linux — each carries its run-as identity, start type, and image path, and file entries carry the Windows owner + DACL (the analog of Linux mode/owner/group). Run `cairn all init` on the clean OS (not just `cairn files init`) so the registry half is baselined.
+
+Because Windows rewrites service registry keys as normal background activity — the time service updates `LastKnownGoodTime` on every NTP sync, Defender churns on definition updates, and BITS / the update + servicing stack toggle during any feature install — an install footprint would otherwise be full of services the installer never touched. `cairn footprint` drops these known background-churn services by default (the list is `winsemantic.NOISE_SERVICES`), so the model shows what the installer actually did. Pass `--include-noise` to keep them. This filtering is footprint-only: the FIM monitor (`cairn registry` / `cairn all`) keeps every change, because a Defender or time-service edit may be exactly the tampering you want to catch.
+
 ## Known gaps
 
-- **Linux only.** Windows services, scheduled tasks, COM registrations, firewall rules, and WMI subscriptions are not parsed. `cairn registry` captures the underlying registry keys, but nothing turns them into semantic objects yet.
+- **COM registrations, firewall rules, and WMI subscriptions are not parsed** on Windows. `cairn registry` captures the underlying registry keys, but nothing turns those particular key shapes into semantic objects yet. (Windows services and scheduled tasks *are* parsed — see above.)
 - **No runtime observation.** By design. See the caveat at the top.
 - **Network posture is invisible.** Listening ports are a runtime property. `AmbientCapabilities=CAP_NET_BIND_SERVICE` hints at a privileged port, but the actual bind isn't in this document.
 - **Installer-run scripts leave no trace of intent.** If a postinstall script runs `chmod 777 /srv/data`, the footprint records the resulting mode. It cannot tell you the script did it deliberately or by accident.

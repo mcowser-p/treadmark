@@ -142,29 +142,11 @@ $fpDb  = "$env:TEMP\cairn-fp.db"
     registry_keys = @("HKLM\System\CurrentControlSet\Services")
     registry_recursive = $true
     registry_max_depth = 2
-    # Noise denylist: OS services that mutate on their own between baseline and
-    # scan (NTP time sync, Defender definition updates, the update/servicing
-    # stack). walk_key skips any subtree whose path contains one of these, in
-    # BOTH baseline and scan, so they never show as a diff. This is the Windows
-    # analog of the Linux noise-exclude list — a settle delay alone can't stop
-    # services that churn continuously. Substring match against the full key.
-    registry_exclude = @(
-        "\Services\W32Time",          # NTP: LastKnownGoodTime updates itself
-        "\Services\bits",             # BITS toggles during background transfers
-        "\Services\wuauserv",         # Windows Update
-        "\Services\DoSvc",            # Delivery Optimization
-        "\Services\sppsvc",           # Software Protection (SvcRestartTask)
-        "\Services\TrustedInstaller", # servicing stack — churns on feature installs
-        "\Services\WinDefend",        # Defender family: constant definition updates
-        "\Services\WdFilter",
-        "\Services\WdNisSvc",
-        "\Services\WdNisDrv",
-        "\Services\WdBoot",
-        "\Services\WdAiNisDrv",
-        "\Services\Sense",
-        "\Services\MDCoreSvc",
-        "\Services\SharedAccess"      # Internet Connection Sharing
-    )
+    # No registry_exclude here on purpose: `cairn footprint` now filters OS
+    # background-churn services (Defender, time sync, BITS, the servicing stack)
+    # itself — see winsemantic.NOISE_SERVICES. Leaving the walk unfiltered means
+    # this smoke actually EXERCISES that shipped filter (asserted below), rather
+    # than pre-excluding the noise in config and never testing it.
 } | ConvertTo-Json | Out-File -FilePath $fpCfg -Encoding ascii
 & $exe all init --config $fpCfg
 if ($LASTEXITCODE -ne 0) { Fail "footprint baseline (all init) failed" }
@@ -220,7 +202,17 @@ if (-not ($iisFiles | Where-Object { $_.owner -and $_.acl })) {
     Fail "file owner/ACL not captured (permission data missing)"
 }
 $svc = @($model.services.windows_services)
-Write-Host "    IIS: $($iisFiles.Count) inetsrv files w/ owner+ACL; $($svc.Count) service(s) touched → $iisFp"
+# Denoise must hold: no background-churn service (BITS, W32Time, Defender, the
+# servicing stack) may appear in a footprint. On Server images IIS's own W3SVC
+# is pre-staged so it isn't a diff — the honest result here is zero services,
+# and crucially NONE of them noise.
+$noise = @($svc | Where-Object {
+    $_.name -match '^(BITS|W32Time|wuauserv|DoSvc|sppsvc|TrustedInstaller|WinDefend|Wd|Sense|MDCoreSvc|SharedAccess)'
+})
+if ($noise.Count -gt 0) {
+    Fail "footprint leaked background-churn services: $(($noise | ForEach-Object { $_.name }) -join ', ')"
+}
+Write-Host "    IIS: $($iisFiles.Count) inetsrv files w/ owner+ACL; $($svc.Count) install service(s), 0 noise → $iisFp"
 Summarize $model "IIS (Web-Server role)"
 
 # Re-baseline (IIS now part of the baseline) so the Datadog footprint is

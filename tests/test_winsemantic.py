@@ -103,6 +103,28 @@ def test_service_name_from_key():
     assert ws.service_name_from_key(r"HKLM\Software\Foo") is None
 
 
+def test_is_noise_service():
+    # Background-churn OS services, case-insensitive.
+    assert ws.is_noise_service("W32Time")
+    assert ws.is_noise_service("bits")
+    assert ws.is_noise_service("WinDefend")
+    assert ws.is_noise_service("TrustedInstaller")
+    # A real installed service is not noise.
+    assert not ws.is_noise_service("datadogagent")
+    assert not ws.is_noise_service("W3SVC")
+    assert not ws.is_noise_service(None)
+    assert not ws.is_noise_service("")
+
+
+def test_noise_identified_from_a_subkey_path():
+    # The footprint filter composes service_name_from_key with is_noise_service,
+    # so a change under a noise service's subkey is still recognized as noise.
+    noisy = SERVICES + r"\W32Time\Config"          # LastKnownGoodTime churn
+    real  = SERVICES + r"\datadogagent\Parameters"  # a genuine install
+    assert ws.is_noise_service(ws.service_name_from_key(noisy)) is True
+    assert ws.is_noise_service(ws.service_name_from_key(real)) is False
+
+
 # ---------------------------------------------------------------------------
 # Scheduled tasks
 # ---------------------------------------------------------------------------

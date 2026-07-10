@@ -655,6 +655,20 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         registry_error = ("no registry baseline — run `cairn all init` (not just "
                           "`cairn files init`) so services are captured")
 
+    # An install footprint should show what the INSTALLER did, not OS background
+    # churn (Defender definition updates, NTP time sync, the update/servicing
+    # stack toggling during a feature install). Drop registry changes belonging
+    # to known noise services unless the caller opts in — this cleans the
+    # reconstructed services list, the registry section, AND the risk flags in
+    # one place. The FIM monitor deliberately keeps them; see
+    # winsemantic.NOISE_SERVICES.
+    if not cfg.get("footprint_include_noise"):
+        def _install_signal(key_path) -> bool:
+            return not wsem.is_noise_service(wsem.service_name_from_key(key_path))
+        reg_added = [r for r in reg_added if _install_signal(r.key_path)]
+        reg_modified = [(o, n) for (o, n) in reg_modified
+                        if _install_signal(n.key_path)]
+
     # A service touched by the install shows up in the diff via whatever value
     # changed (often just Start). Reconstruct each touched service from its
     # FULL current config by re-reading its key live — otherwise a service

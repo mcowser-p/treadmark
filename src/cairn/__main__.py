@@ -97,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Write the model to PATH as JSON. Use '-' or omit for stdout.")
     pfp.add_argument("--root", metavar="DIR",
                      help="Treat DIR as '/' (mounted image, container rootfs, chroot).")
+    pfp.add_argument("--include-noise", action="store_true",
+                     help="Windows: keep OS background-churn services (Defender, "
+                          "time sync, the update/servicing stack). Off by default "
+                          "so the footprint shows only what the installer did.")
 
     # ----- baseline (provenance / inspection) -----
     pb = sub.add_parser("baseline",
@@ -194,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = files.load_config(args.config)
         if getattr(args, "root", None):
             cfg["root_prefix"] = args.root
+        if getattr(args, "include_noise", False):
+            cfg["footprint_include_noise"] = True
         if not cfg.get("paths"):
             print("[!] config has no `paths` configured.", file=sys.stderr)
             return 2

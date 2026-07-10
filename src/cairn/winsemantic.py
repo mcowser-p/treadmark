@@ -149,6 +149,34 @@ def service_name_from_key(key_path: str) -> Optional[str]:
     return m.group("name") if m else None
 
 
+# Windows services that mutate on their own between any two scans, independent
+# of whatever you're installing: the time service rewrites LastKnownGoodTime on
+# every NTP sync, the Defender family churns on definition updates, and BITS /
+# the update + servicing stack toggle during any background transfer or feature
+# install. In an INSTALL FOOTPRINT — "what did this installer write?" — these
+# are noise, so `cairn footprint` drops them by default (override with
+# footprint_include_noise / `--include-noise`). They are deliberately NOT
+# filtered by the FIM registry monitor (`cairn registry` / `all`), where a
+# Defender or time-service change may be exactly the tampering you want to see.
+NOISE_SERVICES = frozenset({
+    "w32time",          # NTP: LastKnownGoodTime updates itself
+    "bits",             # Background Intelligent Transfer — toggles on transfers
+    "wuauserv",         # Windows Update
+    "dosvc",            # Delivery Optimization
+    "sppsvc",           # Software Protection Platform (SvcRestartTask)
+    "trustedinstaller", # component servicing — churns on feature installs
+    "windefend", "wdfilter", "wdnissvc", "wdnisdrv",   # Defender family:
+    "wdboot", "wdainisdrv", "sense", "mdcoresvc",      #   constant def updates
+    "sharedaccess",     # Internet Connection Sharing
+})
+
+
+def is_noise_service(name: Optional[str]) -> bool:
+    """True if `name` is a known background-churn OS service (see
+    NOISE_SERVICES). Case-insensitive; False for None/empty."""
+    return bool(name) and name.lower() in NOISE_SERVICES
+
+
 def parse_windows_services(reg_records) -> list[WindowsService]:
     """Reconstruct WindowsService objects from registry records under
     ...\\Services\\<name>. `reg_records` is any iterable of objects with
