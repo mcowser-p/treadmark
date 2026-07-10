@@ -59,7 +59,8 @@
     <Icon Id="CairnIcon" SourceFile="cairn.ico" />
     <Property Id="ARPPRODUCTICON" Value="CairnIcon" />
     <Property Id="ARPHELPLINK" Value="https://example.com/cairn" />
-    <Property Id="ARPNOMODIFY" Value="1" />
+    <!-- ARPNOMODIFY is owned by the WixUI_InstallDir dialog set; defining it
+         here too is a duplicate-symbol error (WIX0091). Let the UI lib set it. -->
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Cairn" />
