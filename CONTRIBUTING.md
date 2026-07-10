@@ -114,6 +114,6 @@ For maintainers — when first wiring this up, verify:
 
 **Settings → Branches → Branch protection rule for `main`:**
 - ✅ Require pull request before merging
-- ✅ Require status checks: `Validate PR title`, `test`, `linux`
-  (add `windows` back when the Windows CI jobs are re-enabled)
+- ✅ Require status checks: `Validate PR title`, `test`, `linux`, `smoke`,
+  `windows`, `smoke-windows`
 - ✅ Require branches to be up to date before merging

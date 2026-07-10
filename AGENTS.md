@@ -93,7 +93,8 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
    of every module; don't use syntax newer than 3.9.
 3. **Windows code must stay importable-but-dormant on Linux**: everything
    win32 is gated behind `IS_WINDOWS` / conditional imports. Windows CI is
-   currently disabled (commented out in the workflows), but the code ships.
+   active (test + build + MSI smoke on windows-latest); the registry tests
+   in `tests/test_registry.py` run only on Windows runners.
 4. **Baselines store logical paths.** With `--root`, real on-disk paths are
    mapped through `to_logical()` before persisting; `FileRecord.real_path`
    is never written to the DB. This is what makes baselines portable across
@@ -114,8 +115,11 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
 - Placeholder metadata (`Your Org`, `example.com`, `ops@example.com`) is
   intentionally unreplaced until the maintainer supplies real values — the
   list lives in SETUP.md's "Pre-publish TODO".
-- Windows CI jobs are deliberately commented out for the Linux-only release
-  line; re-enabling them is a maintainer decision with prerequisites
-  (MSI UpgradeCode GUID, org strings — see release.yml comments).
+- Windows CI is re-enabled but SOAKING: the release.yml windows jobs are
+  `continue-on-error` so a flake can't hold Linux releases hostage. Flip to
+  blocking (add them to attach.needs, drop continue-on-error) after a couple
+  of clean releases. Org strings + License.rtf in windows/ are still
+  placeholders (SETUP.md pre-publish TODO) — MSI installs, not brand-correct.
 - Windows-side semantic parsing (services, scheduled tasks, COM, firewall)
-  is unbuilt by design; the registry monitor only captures raw keys.
+  is unbuilt by design; the registry monitor only captures raw keys. This is
+  the obvious next Windows feature after the build pipeline is proven.

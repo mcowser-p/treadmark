@@ -35,19 +35,13 @@ You'll get hits in:
 | `README.md` and `docs/*.md` | example URLs |
 | `CHANGELOG.md` | `Your Org` |
 
-Critical: in `windows/cairn.wxs`, the `UpgradeCode` GUID (`930ffdcd-a101-4776-8189-816e224d76fb`) is currently the placeholder cairn was developed against. Generate your own with:
-
-```powershell
-[guid]::NewGuid()
-```
-
-or on Linux:
-
-```bash
-python3 -c "import uuid; print(str(uuid.uuid4()))"
-```
-
-Once you ship a release using that GUID it's **permanent for your product line** — never change it again, or Windows installs from older versions become invisible to the new installer.
+✅ **Done:** the `UpgradeCode` GUID in `windows/cairn.wxs` has been
+regenerated (`589f68fc-59fe-41a1-8ef8-2c2b31bdcc16`) — no longer the
+template placeholder. Once a release ships with it, it's **permanent for
+your product line** — never change it again, or Windows installs from older
+versions become invisible to the new installer. (If you fork this into a
+genuinely separate product, generate your own with `[guid]::NewGuid()` or
+`python3 -c "import uuid; print(uuid.uuid4())"`.)
 
 Commit those changes:
 
@@ -192,9 +186,11 @@ them — but they must be replaced before a release goes public:
 5. `src/cairn/report.py` — the SARIF `informationUri`
    (update `test_sarif_report_parses_and_schema_basics` in the same commit
    if you assert on it)
-6. *(deferred with Windows CI)* `windows/cairn.wxs` org strings + a fresh
-   `UpgradeCode` GUID, and `windows/License.rtf` — required before
-   re-enabling the Windows jobs in ci.yml / release.yml
+6. `windows/cairn.wxs` org strings (`Your Org`, `Software\YourOrg\Cairn`)
+   and `windows/License.rtf` — the MSI installs and is CI-tested, but isn't
+   brand-correct until these are set. (UpgradeCode GUID is already done.)
+   The `Software\YourOrg\Cairn` registry path is functional, not just
+   cosmetic — pick the real path before shipping to avoid a later migration.
 
 ## 8. Day-2 things you'll want eventually
 
