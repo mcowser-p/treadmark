@@ -163,6 +163,7 @@ jobs:
       # Render the captured footprints into the job summary (counts per app).
       - name: footprint summary
         if: always()
+        shell: bash
         run: |
           shopt -s nullglob
           fps=(footprint-*.json)

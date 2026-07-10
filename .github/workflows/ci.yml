@@ -96,6 +96,7 @@ jobs:
           if-no-files-found: ignore
       - name: footprint summary
         if: always()
+        shell: bash
         run: |
           shopt -s nullglob
           fps=(footprint-*.json)
