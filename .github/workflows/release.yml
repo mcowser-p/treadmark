@@ -231,7 +231,15 @@ jobs:
       - name: flatten + checksum
         run: |
           mkdir -p release/
-          find artifacts/ -type f -exec cp -t release/ {} +
+          # Release deliverables only. Skip footprint-*.json (smoke-debug
+          # artifacts, duplicated across every distro×arch matrix leg — they'd
+          # collide flattening into one dir). Copy per file with overwrite so
+          # the arch-independent wheel, uploaded by both Linux arch jobs,
+          # de-dupes cleanly instead of erroring on a just-created collision.
+          find artifacts/ -type f ! -name 'footprint-*.json' -print0 \
+            | while IFS= read -r -d '' f; do
+                cp -f "$f" "release/$(basename "$f")"
+              done
           cd release/
           sha256sum * > SHA256SUMS
           ls -la
