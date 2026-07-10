@@ -126,6 +126,16 @@ Remove-Item -Path "HKCU:\Software\CairnSmoke" -Recurse -Force -ErrorAction Silen
 $SettleSeconds = if ($env:CAIRN_SETTLE_SECONDS) { [int]$env:CAIRN_SETTLE_SECONDS } else { 20 }
 
 Step "footprint: baseline files + registry Services"
+# Evidence for why the IIS footprint shows no services on THIS image: if
+# W3SVC/WAS registry keys already exist BEFORE the role is installed, they are
+# part of the baseline and the role install produces no service diff (the
+# footprint is a diff — it can't show what didn't change). On a server where
+# IIS isn't pre-staged, the install creates these keys and the services appear,
+# as the Datadog capture demonstrates for a genuinely new install.
+foreach ($svc in "W3SVC", "WAS", "IISADMIN") {
+    $staged = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$svc"
+    Write-Host "    pre-install: Services\$svc exists = $staged"
+}
 $fpCfg = "$env:TEMP\cairn-fp.json"
 $fpDb  = "$env:TEMP\cairn-fp.db"
 @{
