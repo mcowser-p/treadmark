@@ -190,3 +190,7 @@ foreach ($app in $apps) {
 
 if ($captured -eq 0) { throw "no app produced a footprint — see per-app [i] lines above" }
 Write-Host "`nWIN11 FOOTPRINT PASS ($captured/$($apps.Count) apps captured)"
+# Reset the exit code: the last app's `cairn footprint` legitimately exits 1
+# (changes present), and GitHub's pwsh wrapper exits the job with the trailing
+# $LASTEXITCODE — which would fail an otherwise-successful run.
+exit 0
