@@ -88,7 +88,11 @@ $apps = @(
        Paths = @("$env:LOCALAPPDATA\Programs") }
     @{ Name = "git";        WingetId = "Git.Git"
        Paths = @("C:\Program Files\Git") }
-    @{ Name = "python";     WingetId = "Python.Python.3.12"
+    # NOT 3.12: that's the same product/minor as the setup-python toolcache
+    # interpreter this script RUNS ON (registry-registered), so the winget
+    # install performs an upgrade that first UNINSTALLS it — seen live: the
+    # pinned $Py vanished mid-run. A different minor installs side-by-side.
+    @{ Name = "python";     WingetId = "Python.Python.3.11"
        Paths = @("$env:LOCALAPPDATA\Programs") }
     @{ Name = "adobereader"; WingetId = "Adobe.Acrobat.Reader.64-bit"
        Paths = @("C:\Program Files\Adobe", "C:\Program Files (x86)\Adobe") }
@@ -101,6 +105,12 @@ $apps = @(
 $captured = 0
 foreach ($app in $apps) {
     Step "footprint($($app.Name)): baseline, install, capture"
+    # An installed app can plausibly remove the interpreter we run on (the
+    # winget Python 3.12 upgrade did exactly that). Fail with a clear
+    # message rather than a baffling 'not recognized' mid-loop.
+    if (-not (Test-Path $Py)) {
+        throw "pinned interpreter disappeared: $Py — a captured app likely uninstalled it (see the Python.Python entry comment)"
+    }
     $cfg = "$env:TEMP\cairn-fp-$($app.Name).json"
     $db  = "$env:TEMP\cairn-fp-$($app.Name).db"
     $fp  = "footprint-windows11-$($app.Name).json"
@@ -128,9 +138,17 @@ foreach ($app in $apps) {
         $ok = ($LASTEXITCODE -eq 0)
     } catch { $ok = $false }
     if (-not $ok) {
-        Write-Host "    [i] $($app.Name): winget install unavailable/failed — skipping"
-        $wingetOut | Where-Object { $_ } | Select-Object -Last 4 |
-            ForEach-Object { Write-Host "        winget: $_" }
+        # Runner images pre-install some of these (git, 7zip): winget exits
+        # non-zero with "already installed / no available upgrade". That's
+        # not a failure — there is simply no clean-install delta to capture
+        # on this image. Say so instead of looking broken.
+        if ($wingetOut | Select-String -SimpleMatch "already installed" -Quiet) {
+            Write-Host "    [i] $($app.Name): pre-installed on the runner image — no clean-install delta; skipping"
+        } else {
+            Write-Host "    [i] $($app.Name): winget install unavailable/failed — skipping"
+            $wingetOut | Where-Object { $_ } | Select-Object -Last 4 |
+                ForEach-Object { Write-Host "        winget: $_" }
+        }
         continue
     }
     Start-Sleep -Seconds $settle
