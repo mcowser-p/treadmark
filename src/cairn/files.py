@@ -396,12 +396,37 @@ def load_accept_file(path: str) -> list[str]:
     return out
 
 
+def printable_path(path: str) -> str:
+    """A path safe to print/log/store even if it carries surrogate-escaped
+    bytes from an undecodable filename. os.walk uses PEP 383 surrogateescape
+    for names that aren't valid UTF-8; printing or UTF-8-encoding those raises
+    UnicodeEncodeError. backslashreplace renders them as \\xNN, losslessly and
+    safely."""
+    return path.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _utf8_storable(path: str) -> bool:
+    """False if `path` contains surrogate-escaped (undecodable) bytes. Such a
+    name cannot be bound to a sqlite TEXT column (the driver encodes to UTF-8
+    and raises), so a baseline can't record it — skip it uniformly at the walk
+    so init, scan, and footprint all agree rather than one of them crashing."""
+    try:
+        path.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def walk_paths(cfg: dict) -> Iterator[str]:
     """Yield real paths to scan.
 
     `paths:` entries are logical (as they appear inside the target root). When
     root_prefix is set they are joined onto it, so the same config scans a live
     host, a mounted disk image, or an extracted container rootfs unchanged.
+
+    Filenames whose bytes aren't valid UTF-8 are skipped with a warning: they
+    can't be stored in the baseline DB, and skipping them at this single
+    chokepoint keeps init and scan consistent (no phantom added/deleted).
     """
     follow = cfg.get("follow_symlinks", False)
     root_prefix = get_root_prefix(cfg)
@@ -412,17 +437,25 @@ def walk_paths(cfg: dict) -> Iterator[str]:
             print(f"[!] path missing, skipping: {root}", file=sys.stderr)
             continue
         if os.path.isfile(root):
-            if not should_skip(root, cfg):
+            if not should_skip(root, cfg) and _utf8_storable(root):
                 yield root
             continue
         for dirpath, dirnames, filenames in os.walk(root, followlinks=follow):
             # let exclude rules prune directories too (faster)
             dirnames[:] = [d for d in dirnames if not should_skip(os.path.join(dirpath, d), cfg)]
             if not should_skip(dirpath, cfg):
-                yield dirpath
+                if _utf8_storable(dirpath):
+                    yield dirpath
+                else:
+                    print(f"[!] skipping undecodable dir name: {printable_path(dirpath)}",
+                          file=sys.stderr)
             for name in filenames:
                 fp = os.path.join(dirpath, name)
                 if should_skip(fp, cfg):
+                    continue
+                if not _utf8_storable(fp):
+                    print(f"[!] skipping undecodable filename: {printable_path(fp)}",
+                          file=sys.stderr)
                     continue
                 yield fp
 
@@ -620,7 +653,7 @@ def cmd_init(cfg: dict, force: bool = False) -> int:
                     rec = stat_file(fp, cfg)
                     save_record(conn, rec)
                 except (OSError, PermissionError) as e:
-                    print(f"    skip {fp}: {e}", file=sys.stderr)
+                    print(f"    skip {printable_path(fp)}: {e}", file=sys.stderr)
                     errors += 1
                     continue
                 except Exception as e:
@@ -628,8 +661,9 @@ def cmd_init(cfg: dict, force: bool = False) -> int:
                     # file (odd encoding, a value sqlite can't bind, an
                     # unexpected raise from a helper). Record it, visibly, and
                     # keep going — the class + path are printed so nothing is
-                    # silently swallowed.
-                    print(f"    skip {fp}: {type(e).__name__}: {e}",
+                    # silently swallowed. printable_path keeps the report line
+                    # itself from re-raising on a surrogate filename.
+                    print(f"    skip {printable_path(fp)}: {type(e).__name__}: {e}",
                           file=sys.stderr)
                     errors += 1
                     continue
@@ -771,13 +805,13 @@ def cmd_scan(cfg: dict, json_out: bool = False,
         try:
             rec = stat_file(fp, cfg)
         except (OSError, PermissionError) as e:
-            err = f"skip {fp}: {e}"
+            err = f"skip {printable_path(fp)}: {e}"
             errors.append(err)
             print(f"    {err}", file=sys.stderr)
             continue
         except Exception as e:
             # As in cmd_init: one pathological file must never abort a scan.
-            err = f"skip {fp}: {type(e).__name__}: {e}"
+            err = f"skip {printable_path(fp)}: {type(e).__name__}: {e}"
             errors.append(err)
             print(f"    {err}", file=sys.stderr)
             continue

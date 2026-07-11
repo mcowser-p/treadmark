@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 from cairn import files
 
 
@@ -82,6 +84,36 @@ def test_scan_survives_one_bad_file(tmp_path, monkeypatch):
     # rc is 0 (no drift) or 1 (drift) but never an uncaught-exception exit.
     rc = files.cmd_scan(cfg)
     assert rc in (0, 1)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX-only: NT filenames are always valid UTF-16")
+def test_init_survives_real_surrogate_filename(tmp_path, capsys):
+    """Reproduces the actual release blocker: a file whose name isn't valid
+    UTF-8. os.walk surrogate-escapes it; sqlite can't bind that path. It must
+    be skipped (at the walk), not crash the baseline."""
+    tree = _tree(tmp_path)
+    # Create a file with a raw 0xFF byte in its name (invalid UTF-8).
+    bad_bytes = os.fsencode(str(tree)) + b"/bad\xff\xfename.conf"
+    try:
+        fd = os.open(bad_bytes, os.O_CREAT | os.O_WRONLY, 0o644)
+        os.close(fd)
+    except (OSError, ValueError):
+        pytest.skip("filesystem rejects non-UTF-8 filenames")
+
+    cfg = _cfg(tmp_path, tree)
+    rc = files.cmd_init(cfg, force=True)
+    assert rc == 0                              # no crash
+    assert os.path.exists(cfg["db_path"])
+    assert "undecodable filename" in capsys.readouterr().err
+
+    conn = files.open_db(cfg["db_path"])
+    try:
+        paths = [r[0] for r in conn.execute("SELECT path FROM files")]
+    finally:
+        conn.close()
+    # good files recorded; the undecodable one is absent, not fatal
+    assert any(p.endswith("a.conf") for p in paths)
+    assert not any("bad" in p and "name.conf" in p for p in paths)
 
 
 def test_init_still_refuses_overwrite_without_force(tmp_path):
