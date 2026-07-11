@@ -674,6 +674,22 @@ def _flag_risks_windows(services, tasks, added_files=(),
     return risks
 
 
+def permissions_note(have_pywin32: bool) -> Optional[str]:
+    """The self-documenting degradation note for Windows models.
+
+    Without pywin32 (e.g. no wheel for this Python/arch — seen on arm64),
+    file records carry owner/acl = null. A consumer must be able to tell
+    "no permission data because the host couldn't read it" apart from "no
+    findings": world_writable_file risks CANNOT fire in this state, and
+    access_hints lose their file-owner evidence source."""
+    if have_pywin32:
+        return None
+    return ("file owner/acl omitted: pywin32 is not installed on this host "
+            "(no wheel for this Python/architecture?) — permission data, "
+            "world_writable_file risks, and file-owner access-hint evidence "
+            "are unavailable in this model")
+
+
 def _win_account_leaf(name: Optional[str]) -> str:
     """Normalize a Windows account for comparison: strip the domain/machine
     qualifier and lowercase. `.\\ddagentuser`, `RUNNERVM\\ddagentuser`, and
@@ -840,7 +856,7 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
     finally:
         conn.close()
 
-    return {
+    model = {
         "schema_version": wsem.SCHEMA_VERSION,
         "footprint_type": "install_time",
         "footprint_caveat": WINDOWS_CAVEAT,
@@ -888,6 +904,14 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
         "risks": risks,
         "scan_errors": errors,
     }
+
+    # Optional degradation marker — present only when permission enrichment
+    # was unavailable (matches the Linux model's optional fidelity key).
+    note = permissions_note(getattr(files_mod, "HAVE_PYWIN32", True))
+    if note:
+        model["permissions_note"] = note
+
+    return model
 
 
 # ---------------------------------------------------------------------------

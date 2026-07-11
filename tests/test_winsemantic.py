@@ -298,6 +298,18 @@ def test_acl_permissive_principal():
     assert f(acl) == "Everyone"
 
 
+def test_permissions_note():
+    from cairn.footprint import permissions_note
+    # pywin32 present: no note key in the model.
+    assert permissions_note(True) is None
+    # degraded (e.g. no arm64 wheel): the note must say what's missing so a
+    # consumer can tell "couldn't read permissions" from "no findings".
+    note = permissions_note(False)
+    assert "owner/acl omitted" in note
+    assert "world_writable_file" in note
+    assert "access-hint" in note
+
+
 def test_derive_access_hints_windows():
     from cairn.footprint import _derive_access_hints_windows
     from dataclasses import dataclass, field

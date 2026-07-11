@@ -61,6 +61,8 @@ $task = @($m.scheduled.scheduled_tasks)  | ForEach-Object { $_.name }
 Write-Host "    files+ $($s.files_added)  reg+ $($s.registry_values_added)  services $($s.services)  tasks $($s.scheduled_tasks)  risks $($s.risks)"
 if ($svc)  { Write-Host "    services: $($svc -join ', ')" }
 if ($task) { Write-Host "    tasks:    $($task -join ', ')" }
+# Self-documented degradation (e.g. pywin32 missing on arm64): surface it.
+if ($m.permissions_note) { Write-Host "    [i] $($m.permissions_note)" }
 
 if ($env:GITHUB_STEP_SUMMARY) {
     @(
