@@ -29,6 +29,38 @@ Write-Host "    $(cmd /c ver)"
 python --version
 python -c "import platform; print('    arch:', platform.machine())"
 
+# ---------------------------------------------------------------------------
+# winget bootstrap. Unlike windows-latest (Server 2025), the windows-11-arm
+# runner image does not expose winget to the runner session (the App
+# Installer package isn't registered for the service account). Bootstrap via
+# the official Microsoft.WinGet.Client module — Repair-WinGetPackageManager
+# provisions/repairs winget — then resolve the exe (the WindowsApps alias
+# usually appears after repair; fall back to the package folder).
+# ---------------------------------------------------------------------------
+function Resolve-Winget {
+    $c = Get-Command winget -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    $exe = Get-ChildItem "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*__8wekyb3d8bbwe\winget.exe" `
+        -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1
+    if ($exe) { return $exe.FullName }
+    return $null
+}
+
+Step "ensure winget"
+$Winget = Resolve-Winget
+if (-not $Winget) {
+    Write-Host "    winget not on PATH - bootstrapping via Microsoft.WinGet.Client"
+    try {
+        Install-PSResource Microsoft.WinGet.Client -TrustRepository -Quiet -ErrorAction Stop
+    } catch {
+        Install-Module Microsoft.WinGet.Client -Force -Scope CurrentUser -ErrorAction Stop
+    }
+    Repair-WinGetPackageManager -Force -Latest
+    $Winget = Resolve-Winget
+}
+if (-not $Winget) { throw "winget unavailable after bootstrap" }
+Write-Host "    winget: $Winget ($(& $Winget --version))"
+
 $settle = if ($env:CAIRN_SETTLE_SECONDS) { [int]$env:CAIRN_SETTLE_SECONDS } else { 20 }
 
 # Per-app watch paths: scoped tight so baselines stay fast. Every app also
@@ -82,7 +114,7 @@ foreach ($app in $apps) {
     }
     $ok = $true
     try {
-        winget install --id $app.WingetId --silent --accept-package-agreements `
+        & $Winget install --id $app.WingetId --silent --accept-package-agreements `
             --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { $ok = $false }
     } catch { $ok = $false }
