@@ -113,15 +113,21 @@ summary.
 
 ## Other clouds — the bookmark
 
-The record model (`AwsRecord`: identity + region + canonical config + hash) and
+The record model (`AwsRecord`: identity + scope + canonical config + hash) and
 the driver-registry pattern are provider-agnostic. Adding a cloud is a new
-`*mon.py` with its own driver set and native inventory API:
+`*mon.py` with its own driver set and native inventory API. Azure, GCP, and
+Kubernetes ship as **dormant, untested scaffolds** — the modules exist and
+follow the awsmon shape, but their CLI subcommands and pyproject extras are
+commented out until each is validated against a real tenant/cluster:
 
-| Provider | Planned module | Native inventory / config API | Auth |
-|---|---|---|---|
-| Azure | `azmon` | Azure Resource Graph / ARM `GET` | service principal / managed identity |
-| GCP | `gcpmon` | Cloud Asset Inventory (`cloudasset`) | service account / ADC |
-| Kubernetes | `k8smon` | API server `GET` (RBAC, NetworkPolicy, admission) | kubeconfig / in-cluster SA |
+| Provider | Module | Status | Native inventory / config API | Auth |
+|---|---|---|---|---|
+| Azure | `azmon` | scaffold (untested) | Azure Resource Graph | service principal / managed identity |
+| GCP | `gcpmon` | scaffold (untested) | Cloud Asset Inventory (`cloudasset`) | service account / ADC |
+| Kubernetes | `k8smon` | scaffold (untested) | API server `list` (RBAC, NetworkPolicy, admission, ServiceAccounts, Secret **metadata only**) | kubeconfig / in-cluster SA |
 
-Each reuses the same table shape, the 0/1/2 contract, the volatile-stripping
-denoise, and the SARIF renderer — only the collectors are provider-specific.
+Each reuses the same table shape, the 0/1/2 contract, and the volatile-stripping
+denoise — only the collectors are provider-specific. To enable one: uncomment
+its subparser + dispatch in `__main__.py`, its extra in `pyproject.toml`, add
+fake-client tests, and (once the first non-AWS cloud is proven) lift the shared
+diff/SARIF/canonicalize logic into a `cloudbase.py`.

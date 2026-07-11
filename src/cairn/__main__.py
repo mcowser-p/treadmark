@@ -80,14 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
                       choices=["json", "sarif", "md", "txt"],
                       help="Force report format (else inferred from --report)")
 
-    # ----- azure / gcp (SCAFFOLD — untested; uncomment to wire) -----
-    # Modules src/cairn/azmon.py and gcpmon.py exist and follow the awsmon
-    # shape, but are unwired pending real-tenant validation. To enable:
-    # uncomment these subparsers, the dispatch branches in main(), and the
-    # azure/gcp extras in pyproject.toml; then add fake-client tests.
+    # ----- azure / gcp / k8s (SCAFFOLD — untested; uncomment to wire) -----
+    # Modules src/cairn/azmon.py, gcpmon.py, k8smon.py exist and follow the
+    # awsmon shape, but are unwired pending real-tenant/cluster validation. To
+    # enable: uncomment these subparsers, the dispatch branches in main(), and
+    # the azure/gcp/k8s extras in pyproject.toml; then add fake-client tests.
     #
     # for _name, _help in (("azure", "Azure account-config drift (needs cairn[azure])"),
-    #                      ("gcp",   "GCP account-config drift (needs cairn[gcp])")):
+    #                      ("gcp",   "GCP account-config drift (needs cairn[gcp])"),
+    #                      ("k8s",   "Kubernetes cluster-config drift (needs cairn[k8s])")):
     #     _p = sub.add_parser(_name, help=_help)
     #     _p.add_argument("command", choices=["init", "scan", "update", "verify"])
     #     _p.add_argument("--config", "-c")
@@ -246,6 +247,12 @@ def main(argv: list[str] | None = None) -> int:
     #     from . import gcpmon
     #     cfg = files.load_config(args.config)
     #     return {"init": gcpmon.cmd_init}.get(args.command, lambda c: gcpmon.cmd_scan(
+    #         c, json_out=args.json, update=args.command == "update",
+    #         quiet=args.command == "verify"))(cfg)
+    # if args.subsystem == "k8s":
+    #     from . import k8smon
+    #     cfg = files.load_config(args.config)
+    #     return {"init": k8smon.cmd_init}.get(args.command, lambda c: k8smon.cmd_scan(
     #         c, json_out=args.json, update=args.command == "update",
     #         quiet=args.command == "verify"))(cfg)
     if args.subsystem == "all":
