@@ -80,6 +80,19 @@ def build_parser() -> argparse.ArgumentParser:
                       choices=["json", "sarif", "md", "txt"],
                       help="Force report format (else inferred from --report)")
 
+    # ----- azure / gcp (SCAFFOLD — untested; uncomment to wire) -----
+    # Modules src/cairn/azmon.py and gcpmon.py exist and follow the awsmon
+    # shape, but are unwired pending real-tenant validation. To enable:
+    # uncomment these subparsers, the dispatch branches in main(), and the
+    # azure/gcp extras in pyproject.toml; then add fake-client tests.
+    #
+    # for _name, _help in (("azure", "Azure account-config drift (needs cairn[azure])"),
+    #                      ("gcp",   "GCP account-config drift (needs cairn[gcp])")):
+    #     _p = sub.add_parser(_name, help=_help)
+    #     _p.add_argument("command", choices=["init", "scan", "update", "verify"])
+    #     _p.add_argument("--config", "-c")
+    #     _p.add_argument("--json", action="store_true")
+
     # ----- all (run files + registry back-to-back) -----
     pa = sub.add_parser("all", help="Run files + registry sequentially")
     pa.add_argument("command", choices=["init", "scan", "update", "verify"])
@@ -222,6 +235,19 @@ def main(argv: list[str] | None = None) -> int:
         return _run_registry(args)
     if args.subsystem == "aws":
         return _run_aws(args)
+    # SCAFFOLD — uncomment once azmon/gcpmon are validated (see build_parser):
+    # if args.subsystem == "azure":
+    #     from . import azmon
+    #     cfg = files.load_config(args.config)
+    #     return {"init": azmon.cmd_init}.get(args.command, lambda c: azmon.cmd_scan(
+    #         c, json_out=args.json, update=args.command == "update",
+    #         quiet=args.command == "verify"))(cfg)
+    # if args.subsystem == "gcp":
+    #     from . import gcpmon
+    #     cfg = files.load_config(args.config)
+    #     return {"init": gcpmon.cmd_init}.get(args.command, lambda c: gcpmon.cmd_scan(
+    #         c, json_out=args.json, update=args.command == "update",
+    #         quiet=args.command == "verify"))(cfg)
     if args.subsystem == "all":
         # exit code is the worst of the two (drift > clean), matching what
         # alerting systems expect from a verify-style check

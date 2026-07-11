@@ -28,6 +28,10 @@ dependencies = []
 yaml    = ["PyYAML>=6.0"]
 windows = ["pywin32>=305; sys_platform == 'win32'"]
 aws     = ["boto3>=1.26"]
+# SCAFFOLD — azmon.py / gcpmon.py exist but are untested & unwired. Uncomment
+# these extras (and their CLI subcommands) once validated against a real tenant.
+# azure   = ["azure-identity>=1.15", "azure-mgmt-resourcegraph>=8.0"]
+# gcp     = ["google-cloud-asset>=3.20"]
 all     = ["PyYAML>=6.0", "pywin32>=305; sys_platform == 'win32'", "boto3>=1.26"]
 build   = ["pyinstaller>=6.0"]
 dev     = ["pytest>=7.4", "PyYAML>=6.0"]
