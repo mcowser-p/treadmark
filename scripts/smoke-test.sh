@@ -209,8 +209,10 @@ capture_footprint() {
     json="$FOOTPRINT_DIR/footprint-$app.json"
 
     step "footprint($app): fresh baseline"
-    cairn files init --config "$FP_CFG" --force >/dev/null 2>&1 \
-        || fail "footprint($app): baseline init failed"
+    # Keep the output: a baseline that exits non-zero must name the offending
+    # path/exception in the log, not vanish behind /dev/null.
+    cairn files init --config "$FP_CFG" --force >"/tmp/init-$app.out" 2>&1 \
+        || { cat "/tmp/init-$app.out"; fail "footprint($app): baseline init failed"; }
 
     # A package can arrive early as a dependency of a previous capture
     # (e.g. Ubuntu's postgresql pulls in cron) — its own install would then

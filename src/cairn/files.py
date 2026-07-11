@@ -610,23 +610,46 @@ def cmd_init(cfg: dict, force: bool = False) -> int:
     set_meta(conn, "os", platform.platform())
 
     count = 0
+    errors = 0
     started = time.time()
     print(f"[*] building baseline → {db_path}")
-    with conn:
-        for fp in walk_paths(cfg):
-            try:
-                rec = stat_file(fp, cfg)
-            except (OSError, PermissionError) as e:
-                print(f"    skip {fp}: {e}", file=sys.stderr)
-                continue
-            save_record(conn, rec)
-            count += 1
-            if count % 500 == 0:
-                print(f"    {count} entries...")
-    set_meta(conn, "file_count", str(count))
-    conn.commit()
+    try:
+        with conn:
+            for fp in walk_paths(cfg):
+                try:
+                    rec = stat_file(fp, cfg)
+                    save_record(conn, rec)
+                except (OSError, PermissionError) as e:
+                    print(f"    skip {fp}: {e}", file=sys.stderr)
+                    errors += 1
+                    continue
+                except Exception as e:
+                    # A forensic baseline must never die on one pathological
+                    # file (odd encoding, a value sqlite can't bind, an
+                    # unexpected raise from a helper). Record it, visibly, and
+                    # keep going — the class + path are printed so nothing is
+                    # silently swallowed.
+                    print(f"    skip {fp}: {type(e).__name__}: {e}",
+                          file=sys.stderr)
+                    errors += 1
+                    continue
+                count += 1
+                if count % 500 == 0:
+                    print(f"    {count} entries...")
+            set_meta(conn, "file_count", str(count))
+            set_meta(conn, "scan_errors", str(errors))
+    except sqlite3.Error as e:
+        # A database/disk-level failure (e.g. disk full) is genuinely fatal
+        # and per-file recovery can't help — fail with a clear, documented
+        # exit code instead of an uncaught traceback.
+        conn.close()
+        print(f"[!] baseline write failed: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        return 2
     conn.close()
-    print(f"[+] baseline done: {count} entries in {time.time() - started:.1f}s")
+    suffix = f" ({errors} skipped)" if errors else ""
+    print(f"[+] baseline done: {count} entries in "
+          f"{time.time() - started:.1f}s{suffix}")
     return 0
 
 
@@ -749,6 +772,12 @@ def cmd_scan(cfg: dict, json_out: bool = False,
             rec = stat_file(fp, cfg)
         except (OSError, PermissionError) as e:
             err = f"skip {fp}: {e}"
+            errors.append(err)
+            print(f"    {err}", file=sys.stderr)
+            continue
+        except Exception as e:
+            # As in cmd_init: one pathological file must never abort a scan.
+            err = f"skip {fp}: {type(e).__name__}: {e}"
             errors.append(err)
             print(f"    {err}", file=sys.stderr)
             continue
