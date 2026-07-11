@@ -189,12 +189,15 @@ jobs:
           if-no-files-found: ignore
 
   # =========================================================================
-  # 2b½. Windows 11 (arm64) footprint probe — SOAK: first use of the
+  # 2b½. Windows 11 (arm64) footprint captures — SOAK: first use of the
   # windows-11-arm runner (client OS + arm64; availability on private repos
   # assumed from the working ubuntu-24.04-arm jobs — this run confirms).
-  # Captures a Chrome install footprint via the pip-installed package; no
-  # arm64 exe/MSI is built yet. continue-on-error: a probe must not gate
-  # releases. NOT in release/attach needs; footprint is a workflow artifact.
+  # Captures the common-desktop app set (7zip, chrome, firefox, notepad++,
+  # vscode, git, python, adobe reader, zoom, slack — incl. the per-user
+  # %LOCALAPPDATA% install shape the Server captures can't show) via the
+  # pip-installed package; no arm64 exe/MSI is built yet. continue-on-error:
+  # a probe must not gate releases. NOT in release/attach needs; footprints
+  # are workflow artifacts.
   # =========================================================================
   windows-11:
     needs: version
@@ -218,7 +221,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             Write-Host "[i] pywin32 unavailable on arm64 - owner/acl will be omitted"
           }
-      - name: chrome footprint
+      - name: desktop app footprints
         shell: pwsh
         run: scripts\win11-footprint.ps1
       - uses: actions/upload-artifact@v4
