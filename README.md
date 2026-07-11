@@ -91,11 +91,17 @@ There's a privacy tradeoff (the baseline now contains snapshots of your config f
 ```
 cairn files       init|scan|update|verify       Filesystem snapshot + drift detection
 cairn registry    init|scan|update|verify       Windows registry baseline (Win only)
+cairn aws         init|scan|update|verify       AWS account-config drift (needs cairn[aws])
 cairn all         init|scan|update|verify       files + registry sequentially
 cairn baseline    info                          Provenance dump for chain-of-custody
 cairn compare     against <golden.db>           Compare host to a reference baseline
 cairn compare     baselines <a.db> <b.db>       Compare two baselines, no FS walk
 ```
+
+The same baseline → scan → drift model works for an AWS account:
+`cairn aws init --profile prod` baselines security-relevant config across all
+enabled regions; `cairn aws scan --report drift.sarif` exits 1 on drift and
+writes SARIF (or json/md/txt). See [docs/cloud-workflow.md](docs/cloud-workflow.md).
 
 `scan` exits 0 if the host matches the baseline, 1 if anything changed, 2 on error. Useful in scripts but not the point — the report content matters more.
 

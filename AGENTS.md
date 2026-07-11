@@ -127,3 +127,13 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
   Services subtree and tasks from Task XML). Still unbuilt: COM registration,
   firewall rules, and local account/group enumeration (Windows accounts live
   in the SAM, not a readable file) — the next gaps.
+- Cloud drift (`cairn aws`, `src/cairn/awsmon.py`): the third subsystem —
+  baseline/scan/diff of AWS account config, SARIF output, `boto3` as the
+  optional `cairn[aws]` extra (core stays zero-hard-dep). v1 ships six curated
+  drivers (iam/s3/ec2/cloudtrail/kms/lambda) in a `DRIVERS` registry; broaden
+  by adding drivers, not plumbing. Volatile-field stripping is the denoise
+  lever (like `NOISE_SERVICES`). **Bookmarked, not built:** multi-account org
+  fan-out, and other clouds (Azure `azmon` / GCP `gcpmon` / k8s) — same record
+  model + SARIF renderer, provider-specific collectors. See
+  docs/cloud-workflow.md. GitHub alert-workflow wiring is intentionally
+  deferred (SARIF output only for now).
