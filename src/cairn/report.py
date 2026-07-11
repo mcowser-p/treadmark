@@ -779,3 +779,208 @@ def render_terminal(result: ScanResult, *, use_color: Optional[bool] = None) -> 
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# AWS drift reports (cairn aws scan --report ...)
+#
+# A parallel, lightweight result type: AwsRecords have no size/mode/owner, so
+# they get their own renderers instead of being shoehorned through the
+# FileRecord-shaped ones. SARIF reuses the same envelope; artifactLocation.uri
+# is the ARN (a plain string is valid; _sarif_result's absolute-path heuristic
+# does not touch "arn:..." values).
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AwsScanResult:
+    scanned_at: str
+    host: str
+    db_path: str
+    added:    list = field(default_factory=list)   # [AwsRecord]
+    modified: list = field(default_factory=list)   # [(old, new)]
+    deleted:  list = field(default_factory=list)   # [AwsRecord]
+
+    @property
+    def has_drift(self) -> bool:
+        return bool(self.added or self.modified or self.deleted)
+
+
+AWS_SARIF_RULES = [
+    {
+        "id":   "cairn.aws.added",
+        "name": "AwsResourceAdded",
+        "shortDescription": {"text": "An AWS resource appeared that was not in the baseline."},
+        "fullDescription":  {"text": "A new resource (IAM principal, security group, bucket policy, trail, key, function...) exists in the account since the baseline was captured. Investigate whether the addition is expected."},
+        "defaultConfiguration": {"level": "warning"},
+    },
+    {
+        "id":   "cairn.aws.modified",
+        "name": "AwsResourceModified",
+        "shortDescription": {"text": "An AWS resource's configuration drifted from the baseline."},
+        "fullDescription":  {"text": "The canonical configuration of a monitored AWS resource changed since the baseline (policy edit, rule change, logging toggled, rotation disabled...)."},
+        "defaultConfiguration": {"level": "error"},
+    },
+    {
+        "id":   "cairn.aws.deleted",
+        "name": "AwsResourceDeleted",
+        "shortDescription": {"text": "An AWS resource present in the baseline is gone."},
+        "fullDescription":  {"text": "A resource that existed when the baseline was captured no longer exists (or is no longer visible to the scanning credentials)."},
+        "defaultConfiguration": {"level": "warning"},
+    },
+]
+
+
+def _aws_changed_keys(old, new) -> list:
+    from .awsmon import changed_keys   # lazy: avoids import cycle
+    return changed_keys(old, new)
+
+
+def _render_aws_sarif(result: AwsScanResult) -> str:
+    findings: list[dict] = []
+    for rec in result.added:
+        findings.append(_sarif_result(
+            "cairn.aws.added", "warning",
+            f"AWS resource appeared since baseline: {rec.resource_type} "
+            f"{rec.arn} (region {rec.region})",
+            rec.arn,
+        ))
+    for (old, new) in result.modified:
+        keys = ", ".join(_aws_changed_keys(old, new)) or "config"
+        findings.append(_sarif_result(
+            "cairn.aws.modified", "error",
+            f"AWS resource drifted from baseline: {new.resource_type} "
+            f"{new.arn} (region {new.region}) — changed: {keys}",
+            new.arn,
+        ))
+    for rec in result.deleted:
+        findings.append(_sarif_result(
+            "cairn.aws.deleted", "warning",
+            f"AWS resource missing since baseline: {rec.resource_type} "
+            f"{rec.arn} (region {rec.region})",
+            rec.arn,
+        ))
+
+    sarif = {
+        "version":  SARIF_VERSION,
+        "$schema":  SARIF_SCHEMA,
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name":    "cairn-aws",
+                    "informationUri": "https://example.com/cairn",
+                    "rules":   AWS_SARIF_RULES,
+                },
+            },
+            "invocations": [{
+                "executionSuccessful": True,
+                "endTimeUtc": result.scanned_at,
+                "machine":    result.host,
+            }],
+            "results": findings,
+        }],
+    }
+    return json.dumps(sarif, indent=2, default=str) + "\n"
+
+
+def _aws_record_dict(rec) -> dict:
+    d = asdict(rec)
+    # config_json is already a JSON string; inline it for readable reports
+    try:
+        d["config"] = json.loads(d.pop("config_json"))
+    except (ValueError, TypeError):
+        pass
+    return d
+
+
+def _render_aws_json(result: AwsScanResult) -> str:
+    doc = {
+        "report_type": "cairn_aws_scan",
+        "generated_at": result.scanned_at,
+        "host": result.host,
+        "baseline_db": result.db_path,
+        "summary": {
+            "added": len(result.added),
+            "modified": len(result.modified),
+            "deleted": len(result.deleted),
+        },
+        "added":   [_aws_record_dict(r) for r in result.added],
+        "modified": [{"old": _aws_record_dict(o), "new": _aws_record_dict(n),
+                      "changed_keys": _aws_changed_keys(o, n)}
+                     for (o, n) in result.modified],
+        "deleted": [_aws_record_dict(r) for r in result.deleted],
+    }
+    return json.dumps(doc, indent=2, default=str) + "\n"
+
+
+def _render_aws_markdown(result: AwsScanResult) -> str:
+    lines = [
+        "# AWS configuration drift report",
+        "",
+        f"- **Scanned:** {result.scanned_at}",
+        f"- **Scanned from:** {result.host}",
+        f"- **Baseline:** `{result.db_path}`",
+        f"- **Drift:** {len(result.added)} added, "
+        f"{len(result.modified)} modified, {len(result.deleted)} deleted",
+        "",
+    ]
+    if result.added:
+        lines += ["## Added", "", "| Type | ARN | Region |", "|---|---|---|"]
+        lines += [f"| {r.resource_type} | `{_md_escape(r.arn)}` | {r.region} |"
+                  for r in result.added] + [""]
+    if result.modified:
+        lines += ["## Modified", "",
+                  "| Type | ARN | Region | Changed keys |", "|---|---|---|---|"]
+        lines += [f"| {n.resource_type} | `{_md_escape(n.arn)}` | {n.region} "
+                  f"| {_md_escape(', '.join(_aws_changed_keys(o, n)) or 'config')} |"
+                  for (o, n) in result.modified] + [""]
+    if result.deleted:
+        lines += ["## Deleted", "", "| Type | ARN | Region |", "|---|---|---|"]
+        lines += [f"| {r.resource_type} | `{_md_escape(r.arn)}` | {r.region} |"
+                  for r in result.deleted] + [""]
+    if not result.has_drift:
+        lines += ["No AWS configuration drift detected.", ""]
+    return "\n".join(lines)
+
+
+def _render_aws_plaintext(result: AwsScanResult) -> str:
+    lines = [f"AWS drift scan @ {result.scanned_at} (from {result.host})",
+             f"baseline: {result.db_path}",
+             f"added: {len(result.added)}  modified: {len(result.modified)}  "
+             f"deleted: {len(result.deleted)}", ""]
+    for r in result.added:
+        lines.append(f"  + {r.resource_type}  {r.arn}")
+    for (o, n) in result.modified:
+        keys = ", ".join(_aws_changed_keys(o, n)) or "config"
+        lines.append(f"  ~ {n.resource_type}  {n.arn}  (changed: {keys})")
+    for r in result.deleted:
+        lines.append(f"  - {r.resource_type}  {r.arn}")
+    if not result.has_drift:
+        lines.append("  no drift detected")
+    return "\n".join(lines) + "\n"
+
+
+AWS_FORMATS = {"json", "sarif", "md", "txt"}
+
+
+def render_aws(result: AwsScanResult, fmt: str) -> str:
+    if fmt == "json":  return _render_aws_json(result)
+    if fmt == "sarif": return _render_aws_sarif(result)
+    if fmt == "md":    return _render_aws_markdown(result)
+    if fmt == "txt":   return _render_aws_plaintext(result)
+    raise ValueError(f"format {fmt!r} not supported for aws scans; "
+                     f"valid: {sorted(AWS_FORMATS)}")
+
+
+def write_aws_report(result: AwsScanResult, path, fmt=None) -> str:
+    """Render and atomically write an AWS drift report. Path may be None when
+    only --format was given (prints to stdout)."""
+    actual = detect_format(path or "-", fmt)
+    body = render_aws(result, actual)
+    if not path or path == "-":
+        print(body, end="")
+        return actual
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(body)
+    os.replace(tmp, path)
+    return actual
