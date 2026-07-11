@@ -116,14 +116,22 @@ jobs:
       - name: install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
 
-      - name: build wheel + binary + deb + rpm
+      # Nuitka compiles C — cache its work dir so warm builds are fast.
+      - name: cache nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Nuitka
+          key: nuitka-linux-${{ matrix.arch }}
+
+      # No wheel: a wheel is a zip of the literal source; publishing it
+      # would defeat the compiled (Nuitka) binaries.
+      - name: build binary + deb + rpm
         run: bash scripts/build-linux.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
           path: |
-            dist/*.whl
             dist/cairn-linux-${{ matrix.arch }}
             dist/*.deb
             dist/*.rpm
@@ -157,6 +165,11 @@ jobs:
             ~\.dotnet\tools
             ~\.wix
           key: wix-5.0.2
+      - name: cache nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka
+          key: nuitka-windows-x86_64
       - name: stamp the release version
         shell: pwsh
         run: python scripts/stamp_version.py "${{ needs.version.outputs.version }}"
@@ -343,8 +356,9 @@ jobs:
           # Release deliverables only. Skip footprint-*.json (smoke-debug
           # artifacts, duplicated across every distro×arch matrix leg — they'd
           # collide flattening into one dir). Copy per file with overwrite so
-          # the arch-independent wheel, uploaded by both Linux arch jobs,
-          # de-dupes cleanly instead of erroring on a just-created collision.
+          # any same-named file across artifacts de-dupes cleanly instead of
+          # erroring on a just-created collision. (No wheel is attached — a
+          # wheel is literal source; the binaries are Nuitka-compiled.)
           find artifacts/ -type f ! -name 'footprint-*.json' -print0 \
             | while IFS= read -r -d '' f; do
                 cp -f "$f" "release/$(basename "$f")"

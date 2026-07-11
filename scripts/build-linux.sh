@@ -5,7 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-scripts/build-wheel.sh
+# NOTE: build-wheel.sh is deliberately NOT run here. A wheel is a zip of
+# the literal source — publishing it on releases defeated the compiled
+# (Nuitka) binaries. The script is kept for a future private index; run it
+# by hand if you need a wheel.
 scripts/build-binary-linux.sh
 scripts/build-deb.sh
 scripts/build-rpm.sh

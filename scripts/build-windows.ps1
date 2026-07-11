@@ -1,7 +1,7 @@
 # scripts/build-windows.ps1
-# Run on a Windows host with .NET SDK 6+ installed.
+# Run on a Windows host with .NET SDK 6+ and MSVC (VS Build Tools) installed.
 # Produces:
-#   dist\cairn-windows-x86_64.exe   (PyInstaller single-file binary)
+#   dist\cairn-windows-x86_64.exe   (Nuitka-compiled single-file binary)
 #   dist\cairn-<version>.msi         (WiX MSI installer)
 
 $ErrorActionPreference = "Stop"
@@ -13,41 +13,52 @@ Write-Host "Building cairn $version"
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
 # ---------------------------------------------------------------------------
-# 1. Single-file .exe via PyInstaller
+# 1. Single-file COMPILED .exe via Nuitka.
+#
+# Nuitka, not PyInstaller: PyInstaller ships extractable bytecode (near-source
+# recovery with public tooling); Nuitka transpiles the package to C and
+# compiles it with MSVC — machine code, no .pyc payload. pywin32's .pyd
+# extension modules are bundled as-is (they're public code; ours is what
+# gets compiled).
 # ---------------------------------------------------------------------------
-Write-Host ">>> windows binary"
-python -m pip install --quiet pyinstaller pyyaml pywin32
+Write-Host ">>> windows binary (nuitka)"
+python -m pip install --quiet nuitka pyyaml pywin32
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
-
-# PyInstaller resolves --icon relative to --specpath (build\), not the CWD,
-# so pass an absolute path or it looks for build\windows\cairn.ico.
-$icon = (Resolve-Path "windows\cairn.ico").Path
+# Install cairn itself so Nuitka resolves the package like any import.
+python -m pip install --quiet -e .
+if ($LASTEXITCODE -ne 0) { throw "pip install -e . failed" }
 
 # No `| Out-Null`: piping a native command disables PowerShell's auto-throw on
 # non-zero exit, which previously let a failed build slip through. Check
 # $LASTEXITCODE explicitly instead.
-python -m PyInstaller `
+python -m nuitka `
     --onefile `
-    --name cairn `
-    --distpath dist\_pyi `
-    --workpath build\_pyi `
-    --specpath build `
-    --paths src `
-    --icon $icon `
-    --hidden-import yaml `
-    --hidden-import win32security `
-    --hidden-import ntsecuritycon `
+    --assume-yes-for-downloads `
+    --msvc=latest `
+    --include-package=cairn `
+    --include-package=yaml `
+    --include-module=win32security `
+    --include-module=ntsecuritycon `
+    --include-module=pywintypes `
+    --windows-icon-from-ico=windows\cairn.ico `
+    --company-name="Your Org" `
+    --product-name="cairn" `
+    --file-version=$version `
+    --product-version=$version `
+    --onefile-tempdir-spec='{CACHE_DIR}\cairn\{VERSION}' `
+    --output-filename=cairn-windows-x86_64.exe `
+    --output-dir=build\_nuitka `
     scripts\cairn_launcher.py
-if ($LASTEXITCODE -ne 0) { throw "pyinstaller failed" }
+if ($LASTEXITCODE -ne 0) { throw "nuitka build failed" }
 
-Move-Item -Force dist\_pyi\cairn.exe dist\cairn-windows-x86_64.exe
-Remove-Item -Recurse -Force dist\_pyi
+Move-Item -Force build\_nuitka\cairn-windows-x86_64.exe dist\cairn-windows-x86_64.exe
+Remove-Item -Recurse -Force build\_nuitka
 
-# A real onefile exe embeds Python (~8-12 MB); a bare bootloader (~300 KB)
-# means the build silently produced a broken binary.
+# A real onefile exe embeds the runtime (~10+ MB); a tiny stub means the
+# build silently produced a broken binary.
 $exeSize = (Get-Item dist\cairn-windows-x86_64.exe).Length
 if ($exeSize -lt 2MB) {
-    throw "built exe is only $exeSize bytes — a bare bootloader, not a full onefile build"
+    throw "built exe is only $exeSize bytes — a stub, not a full onefile build"
 }
 
 # ---------------------------------------------------------------------------

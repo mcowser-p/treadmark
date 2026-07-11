@@ -50,6 +50,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: cache nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Nuitka
+          key: nuitka-linux-x86_64
       - run: bash scripts/build-linux.sh
       - run: ls -lh dist/
       - uses: actions/upload-artifact@v4
@@ -135,6 +140,11 @@ jobs:
             ~\.dotnet\tools
             ~\.wix
           key: wix-5.0.2
+      - name: cache nuitka
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka
+          key: nuitka-windows-x86_64
       - shell: pwsh
         run: scripts\build-windows.ps1
       - uses: actions/upload-artifact@v4
