@@ -26,8 +26,14 @@ function Step($m) { Write-Host "`n== $m" }
 
 Step "environment"
 Write-Host "    $(cmd /c ver)"
-python --version
-python -c "import platform; print('    arch:', platform.machine())"
+# Pin the interpreter PATH ONCE. Installing apps mid-run can change what
+# bare `python` resolves to (seen live: after the winget Python install,
+# `python` re-resolved to a different hostedtoolcache interpreter without
+# cairn installed). Every cairn call below uses this pinned path.
+$Py = (Get-Command python).Source
+Write-Host "    python: $Py"
+& $Py --version
+& $Py -c "import platform; print('    arch:', platform.machine())"
 
 # ---------------------------------------------------------------------------
 # winget bootstrap. Unlike windows-latest (Server 2025), the windows-11-arm
@@ -107,26 +113,33 @@ foreach ($app in $apps) {
         registry_max_depth = 2
     } | ConvertTo-Json | Out-File -FilePath $cfg -Encoding ascii
 
-    python -m cairn all init --config $cfg --force | Out-Null
+    & $Py -m cairn all init --config $cfg --force | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    [i] $($app.Name): baseline failed — skipping"
         continue
     }
-    $ok = $true
+    # Keep winget's output so a failed install is diagnosable (seen live:
+    # 7zip and git skipped with no clue why) — print the tail on failure.
+    $wingetOut = @()
     try {
-        & $Winget install --id $app.WingetId --silent --accept-package-agreements `
-            --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { $ok = $false }
+        $wingetOut = & $Winget install --id $app.WingetId --silent `
+            --accept-package-agreements --accept-source-agreements `
+            --disable-interactivity 2>&1
+        $ok = ($LASTEXITCODE -eq 0)
     } catch { $ok = $false }
     if (-not $ok) {
         Write-Host "    [i] $($app.Name): winget install unavailable/failed — skipping"
+        $wingetOut | Where-Object { $_ } | Select-Object -Last 4 |
+            ForEach-Object { Write-Host "        winget: $_" }
         continue
     }
     Start-Sleep -Seconds $settle
 
-    python -m cairn footprint --config $cfg --app $app.Name --report $fp
-    if ($LASTEXITCODE -ne 1) {
-        Write-Host "    [i] $($app.Name): no footprint delta (exit $LASTEXITCODE) — skipping"
+    & $Py -m cairn footprint --config $cfg --app $app.Name --report $fp
+    # Exit 1 = install delta found. But a crashed interpreter/module also
+    # exits 1 — require the report file to actually exist before trusting it.
+    if ($LASTEXITCODE -ne 1 -or -not (Test-Path $fp)) {
+        Write-Host "    [i] $($app.Name): no usable footprint (exit $LASTEXITCODE) — skipping"
         Remove-Item $fp -ErrorAction SilentlyContinue
         continue
     }
