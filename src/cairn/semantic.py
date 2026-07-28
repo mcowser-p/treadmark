@@ -31,7 +31,7 @@ import os
 import re
 import stat
 from dataclasses import dataclass, field, asdict
-from typing import Optional, TYPE_CHECKING
+from typing import Iterator, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .files import FileRecord
@@ -48,6 +48,17 @@ SCHEMA_VERSION = "1.0"
 _CLASSIFIERS: list[tuple[str, re.Pattern]] = [
     ("systemd_unit",      re.compile(r"^/(etc|usr/lib|lib|run)/systemd/(system|user)/.+\.(service|timer|socket|target|mount|path|slice)$")),
     ("systemd_dropin",    re.compile(r"^/(etc|usr/lib|lib)/systemd/(system|user)/.+\.d/.+\.conf$")),
+    # podman quadlets: systemd-INI files the podman generator turns into
+    # .service units at daemon-reload. Rootful roots first, then the rootless
+    # per-user locations (podman-systemd.unit(5)).
+    ("quadlet",           re.compile(r"^(/etc/containers/systemd|/usr/share/containers/systemd"
+                                     r"|/home/[^/]+/\.config/containers/systemd"
+                                     r"|/root/\.config/containers/systemd)"
+                                     r"/.+\.(container|pod|network|volume|kube|image|build)$")),
+    ("quadlet_dropin",    re.compile(r"^(/etc/containers/systemd|/usr/share/containers/systemd"
+                                     r"|/home/[^/]+/\.config/containers/systemd"
+                                     r"|/root/\.config/containers/systemd)"
+                                     r"/.+\.d/[^/]+\.conf$")),
     ("cron_d",            re.compile(r"^/etc/cron\.d/[^/]+$")),
     ("cron_periodic",     re.compile(r"^/etc/cron\.(hourly|daily|weekly|monthly)/[^/]+$")),
     ("crontab_system",    re.compile(r"^/etc/crontab$")),
@@ -148,6 +159,35 @@ class SystemdUnit:
     protect_home: Optional[str] = None
     no_new_privileges: Optional[bool] = None
     supplementary_groups: list[str] = field(default_factory=list)
+    wanted_by: list[str] = field(default_factory=list)
+    # [Timer] directives — modeled so a timer's schedule and the service it
+    # activates survive into the JSON instead of the catch-all below.
+    on_calendar: list[str] = field(default_factory=list)
+    on_boot_sec: Optional[str] = None        # raw span string, e.g. "15min"
+    on_unit_active_sec: Optional[str] = None
+    on_active_sec: Optional[str] = None
+    persistent: Optional[bool] = None
+    activates: Optional[str] = None          # timers only: [Timer] Unit= else <stem>.service
+    # Anything we saw but didn't model, so nothing is silently dropped
+    other_directives: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class QuadletUnit:
+    name: str                       # e.g. "myapp-web.container"
+    path: str
+    quadlet_type: str               # container | pod | network | volume | kube | image | build
+    service_name: str               # unit podman generates, e.g. "myapp-web.service"
+    rootless: bool = False
+    owner: Optional[str] = None     # rootless owner; None when rootful
+    description: Optional[str] = None
+    image: Optional[str] = None
+    exec: list[str] = field(default_factory=list)
+    container_user: Optional[str] = None   # [Container] User= — container-internal uid, not a host principal
+    publish_ports: list[str] = field(default_factory=list)
+    volumes: list[str] = field(default_factory=list)
+    networks: list[str] = field(default_factory=list)
+    environment_files: list[str] = field(default_factory=list)
     wanted_by: list[str] = field(default_factory=list)
     # Anything we saw but didn't model, so nothing is silently dropped
     other_directives: dict[str, list[str]] = field(default_factory=dict)
@@ -257,17 +297,15 @@ def _parse_bool(value: str) -> Optional[bool]:
     return None
 
 
-def parse_systemd_unit(path: str, content: str) -> SystemdUnit:
-    """Parse a systemd unit file into structured form.
+def _iter_unit_directives(content: str) -> Iterator[tuple[str, str, str]]:
+    """Yield (section, key, value) for each directive in systemd-INI text.
 
-    We do not use configparser: systemd allows duplicate keys (multiple
-    ExecStart= lines), keys with no value (which reset a list), and its
-    escaping rules differ from INI. Hand-rolled is safer here.
+    Shared by the unit and quadlet parsers. We do not use configparser:
+    systemd allows duplicate keys (multiple ExecStart= lines), keys with no
+    value (which reset a list), and its escaping rules differ from INI.
+    Handles trailing-backslash line continuations and comments; duplicate
+    keys are yielded in file order. Section is "" before the first header.
     """
-    name = os.path.basename(path)
-    unit_type = name.rsplit(".", 1)[-1] if "." in name else "unknown"
-    unit = SystemdUnit(name=name, path=path, unit_type=unit_type)
-
     section = ""
     # Handle line continuations (trailing backslash)
     logical_lines: list[str] = []
@@ -296,9 +334,17 @@ def parse_systemd_unit(path: str, content: str) -> SystemdUnit:
         if "=" not in s:
             continue
         key, _, value = s.partition("=")
-        key = key.strip()
-        value = value.strip()
+        yield section, key.strip(), value.strip()
 
+
+def parse_systemd_unit(path: str, content: str) -> SystemdUnit:
+    """Parse a systemd unit file into structured form."""
+    name = os.path.basename(path)
+    unit_type = name.rsplit(".", 1)[-1] if "." in name else "unknown"
+    unit = SystemdUnit(name=name, path=path, unit_type=unit_type)
+    timer_unit: Optional[str] = None
+
+    for section, key, value in _iter_unit_directives(content):
         # An empty value resets a list directive; model that as clearing.
         if key == "Description":
             unit.description = value
@@ -351,8 +397,26 @@ def parse_systemd_unit(path: str, content: str) -> SystemdUnit:
             unit.supplementary_groups.extend(_split_list(value))
         elif key == "WantedBy":
             unit.wanted_by.extend(_split_list(value))
+        # [Timer] directives are section-gated so e.g. a [Path] unit's Unit=
+        # still lands in the catch-all below.
+        elif section == "Timer" and key == "OnCalendar":
+            unit.on_calendar.append(value) if value else unit.on_calendar.clear()
+        elif section == "Timer" and key == "OnBootSec":
+            unit.on_boot_sec = value or None
+        elif section == "Timer" and key == "OnUnitActiveSec":
+            unit.on_unit_active_sec = value or None
+        elif section == "Timer" and key == "OnActiveSec":
+            unit.on_active_sec = value or None
+        elif section == "Timer" and key == "Persistent":
+            unit.persistent = _parse_bool(value)
+        elif section == "Timer" and key == "Unit":
+            timer_unit = value or None
         else:
             unit.other_directives.setdefault(f"{section}.{key}", []).append(value)
+
+    if unit.unit_type == "timer":
+        # A timer with no explicit Unit= activates the same-stem service.
+        unit.activates = timer_unit or name[: -len(".timer")] + ".service"
 
     return unit
 
@@ -371,6 +435,95 @@ def systemd_exec_binary(exec_line: str) -> Optional[str]:
         end = s.find('"', 1)
         return s[1:end] if end > 0 else s[1:]
     return s.split()[0]
+
+
+# ---------------------------------------------------------------------------
+# quadlet parsing
+# ---------------------------------------------------------------------------
+
+# podman-systemd.unit(5): the suffix the quadlet generator appends to a file's
+# stem when naming the generated .service unit, per file type.
+_QUADLET_SERVICE_SUFFIX = {
+    "container": "", "kube": "", "pod": "-pod", "volume": "-volume",
+    "network": "-network", "image": "-image", "build": "-build",
+}
+
+_ROOTLESS_HOME = re.compile(r"^/home/([^/]+)/\.config/containers/systemd/")
+_ROOTLESS_ROOT = re.compile(r"^/root/\.config/containers/systemd/")
+_ROOTLESS_ETC_USERS = re.compile(r"^/etc/containers/systemd/users/(?:(\d+)/)?")
+
+
+def quadlet_service_name(filename: str) -> str:
+    """Generated systemd unit for a quadlet file: foo.container -> foo.service,
+    foo.pod -> foo-pod.service, ... per podman-systemd.unit(5)."""
+    base = os.path.basename(filename)
+    stem, _, ext = base.rpartition(".")
+    return f"{stem}{_QUADLET_SERVICE_SUFFIX.get(ext, '')}.service"
+
+
+def _quadlet_scope(path: str,
+                   file_owner: Optional[str]) -> tuple[bool, Optional[str]]:
+    """(rootless, owner) for a quadlet path. Path evidence wins over the file
+    owner: it stays correct even for --root scans where uid resolution can't
+    consult the image's passwd."""
+    m = _ROOTLESS_HOME.match(path)
+    if m:
+        return True, m.group(1)
+    if _ROOTLESS_ROOT.match(path):
+        return True, "root"
+    m = _ROOTLESS_ETC_USERS.match(path)
+    if m:
+        # /etc/containers/systemd/users/<uid>/ is per-uid; bare users/ applies
+        # to all users. loginctl accepts numeric uids, so the uid is usable.
+        return True, file_owner or m.group(1)
+    return False, None
+
+
+def parse_quadlet(path: str, content: str,
+                  file_owner: Optional[str] = None) -> QuadletUnit:
+    """Parse a podman quadlet file into structured form.
+
+    Quadlets are systemd-INI files with podman-specific sections; the podman
+    generator turns each into a .service unit at daemon-reload. We model the
+    fields an access policy cares about and record the generated unit name so
+    a grant can target it.
+    """
+    name = os.path.basename(path)
+    quadlet_type = name.rsplit(".", 1)[-1]
+    rootless, owner = _quadlet_scope(path, file_owner)
+    q = QuadletUnit(name=name, path=path, quadlet_type=quadlet_type,
+                    service_name=quadlet_service_name(name),
+                    rootless=rootless, owner=owner)
+
+    service_name_override: Optional[str] = None
+    for section, key, value in _iter_unit_directives(content):
+        if section == "Unit" and key == "Description":
+            q.description = value or None
+        elif key == "Image":
+            q.image = value or None
+        elif key == "Exec":
+            q.exec.append(value) if value else q.exec.clear()
+        elif section == "Container" and key == "User":
+            q.container_user = value or None
+        elif key == "PublishPort":
+            q.publish_ports.append(value) if value else q.publish_ports.clear()
+        elif key == "Volume":
+            q.volumes.append(value) if value else q.volumes.clear()
+        elif key == "Network":
+            q.networks.append(value) if value else q.networks.clear()
+        elif key == "EnvironmentFile":
+            q.environment_files.append(value)
+        elif section == "Install" and key == "WantedBy":
+            q.wanted_by.extend(_split_list(value)) if value else q.wanted_by.clear()
+        elif key == "ServiceName":
+            # podman >= 5.0: explicit override of the generated unit name
+            service_name_override = value or None
+        else:
+            q.other_directives.setdefault(f"{section}.{key}", []).append(value)
+
+    if service_name_override:
+        q.service_name = service_name_override + ".service"
+    return q
 
 
 # ---------------------------------------------------------------------------

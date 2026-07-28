@@ -114,11 +114,59 @@ Description=MyApp agent (no User= — runs as root)
 ExecStart=/usr/bin/myapp-helper --agent
 """
 
+UNIT_MAINTENANCE = """\
+[Unit]
+Description=MyApp maintenance task
+
+[Service]
+Type=oneshot
+User=myapp
+ExecStart=/usr/bin/myapp --maintain
+LogsDirectory=myapp
+"""
+
+TIMER_MAINTENANCE = """\
+[Unit]
+Description=MyApp nightly maintenance
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"""
+
+QUADLET_WEB = """\
+[Unit]
+Description=MyApp web frontend
+
+[Container]
+Image=registry.example.com/myapp/web:1.0
+PublishPort=8080:80
+Volume=/var/lib/myapp:/data:Z
+EnvironmentFile=/etc/myapp/web.env
+User=10001
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+QUADLET_ROOTLESS = """\
+[Container]
+Image=registry.example.com/myapp/sidecar:1.0
+"""
+
 CRON_D_ENTRY = "*/5 * * * * myapp /usr/bin/myapp-helper --tick\n"
 
 ROOTFS_DIRS = [
     "etc/systemd/system",
+    "etc/containers/systemd",
     "etc/cron.d",
+    "home",
     "usr/bin",
     "usr/lib",
     "bin",
@@ -152,7 +200,24 @@ def install_app(root: Path, *, setuid: bool = True) -> None:
         UNIT_WITH_USER, encoding="utf-8")
     (root / "etc/systemd/system/myapp-agent.service").write_text(
         UNIT_NO_USER, encoding="utf-8")
+    (root / "etc/systemd/system/myapp-maintenance.service").write_text(
+        UNIT_MAINTENANCE, encoding="utf-8")
+    (root / "etc/systemd/system/myapp-maintenance.timer").write_text(
+        TIMER_MAINTENANCE, encoding="utf-8")
     (root / "etc/cron.d/myapp").write_text(CRON_D_ENTRY, encoding="utf-8")
+
+    # Quadlets: one rootful (podman generates myapp-web.service from it) and
+    # one rootless under dev1's home (owner derived from the path).
+    (root / "etc/containers/systemd/myapp-web.container").write_text(
+        QUADLET_WEB, encoding="utf-8")
+    rootless_dir = root / "home/dev1/.config/containers/systemd"
+    rootless_dir.mkdir(parents=True, exist_ok=True)
+    (rootless_dir / "myapp-rootless.container").write_text(
+        QUADLET_ROOTLESS, encoding="utf-8")
+
+    # Config tree referenced by the quadlet's EnvironmentFile=
+    (root / "etc/myapp").mkdir(exist_ok=True)
+    (root / "etc/myapp/web.env").write_text("WEB_PORT=8080\n", encoding="utf-8")
 
     # New system account (uid<1000, nologin), one login-capable user, a new
     # group, and membership added to the privileged `docker` group.
@@ -195,7 +260,7 @@ def rootfs_config(make_config):
     """Config whose logical paths cover the fixture rootfs layout."""
     def _make(**overrides):
         return make_config(
-            ["/etc", "/usr/bin", "/bin", "/var/lib"],
+            ["/etc", "/usr/bin", "/bin", "/var/lib", "/home"],
             name=overrides.pop("name", "rootfs-baseline"),
             **overrides,
         )
