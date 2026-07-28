@@ -88,7 +88,8 @@ Layer diffs also only exist for OCI images. A mounted VM disk, a golden AMI, and
 
 | Object | Sources | What's extracted |
 |---|---|---|
-| systemd units | `/etc/systemd/system`, `/usr/lib/systemd/system`, drop-ins | `User=`, `Group=`, all `ExecStart*`, `SupplementaryGroups=`, `AmbientCapabilities=`, `CapabilityBoundingSet=`, `ReadWritePaths=`, `ReadOnlyPaths=`, `StateDirectory=`/`LogsDirectory=`/`RuntimeDirectory=`/`ConfigurationDirectory=`/`CacheDirectory=`, `EnvironmentFile=`, `WorkingDirectory=`, and the hardening directives (`PrivateTmp`, `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`) |
+| systemd units | `/etc/systemd/system`, `/usr/lib/systemd/system`, drop-ins | `User=`, `Group=`, all `ExecStart*`, `SupplementaryGroups=`, `AmbientCapabilities=`, `CapabilityBoundingSet=`, `ReadWritePaths=`, `ReadOnlyPaths=`, `StateDirectory=`/`LogsDirectory=`/`RuntimeDirectory=`/`ConfigurationDirectory=`/`CacheDirectory=`, `EnvironmentFile=`, `WorkingDirectory=`, the hardening directives (`PrivateTmp`, `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`), and for `.timer` units the `[Timer]` schedule (`OnCalendar=`, `On*Sec=`, `Persistent=`) plus the service the timer activates |
+| podman quadlets | `/etc/containers/systemd`, `/usr/share/containers/systemd`, rootless `~/.config/containers/systemd` and `/etc/containers/systemd/users/` | quadlet type, the generated unit name (`foo.container` → `foo.service`, `foo.pod` → `foo-pod.service`, …, honoring `ServiceName=`), `Image=`, `Exec=`, container `User=`, `PublishPort=`, `Volume=`, `Network=`, `EnvironmentFile=`, and rootless-ness + the owning user (derived from the path) |
 | cron jobs | `/etc/cron.d/*`, `/etc/crontab`, `/etc/cron.{hourly,daily,weekly,monthly}/*`, `/var/spool/cron/*` | schedule (including `@reboot` and friends), the user field where the format has one, the command |
 | users | `/etc/passwd` diff | name, uid, gid, home, shell, whether it's a system account, whether login is disabled |
 | groups | `/etc/group` diff | new groups, and **membership changes on existing groups** — this is how you catch a service account being added to `docker`, `sudo`, or `shadow` |
@@ -107,7 +108,7 @@ application, host, platform, root_prefix
 baseline{ db_path, db_sha256, created_at, source_host, source_os }
 summary{ counts }
 principals{ users_added, groups_added, membership_changes }
-services{ systemd_units }
+services{ systemd_units, quadlets }
 scheduled{ cron_jobs }
 privilege{ sudo_rules, setuid_binaries, setgid_binaries,
            file_capabilities, pam_files_touched }
@@ -182,6 +183,19 @@ The last sentence matters. The install tree is the thing most likely to get over
 > Treat each service's `run_as` and each scheduled task's identity as the principal set — the SAM is unreadable, so never claim an account was "created", only that it is *referenced*; flag every non-builtin `run_as` for on-host reconciliation. Derive DACL scoping (`icacls`) from the per-file `owner`/`acl` evidence; prefer `NT SERVICE\<name>` virtual accounts or gMSAs over custom accounts, and propose `sc.exe sidtype restricted` plus privilege stripping per user-mode service (staged first). Emit the `service_binary` sha256 inventory as AppLocker/WDAC allowlist input, but regenerate rule hashes on-host — AppLocker uses Authenticode PE hashes, not flat-file sha256. Kernel drivers are not principals: route them to driver-signing / WDAC review. Firewall rules, COM registrations, and WMI subscriptions are capture gaps — anything network-facing is `[needs-runtime-confirmation]`. State the install channel: winget/MSI installs have full footprint visibility; Windows Feature installs activate pre-staged component-store payload, so absent services are not evidence of absence — complete them from app knowledge and say so.
 
 The output format for a full report is the Windows section map in the runbooks reading guide (`smoke-out/runbooks/README.md`): the same 13 sections as the Linux runbooks, with Windows meanings, plus a PowerShell/INF/XML stub set.
+
+## Exporting Ansible access vars
+
+`--access-vars PATH` (or the standalone `cairn access-vars footprint.json -o PATH`) turns a Linux footprint into a ready-to-review Ansible vars file for the `mcowser_p.declarative_access` role: bare service/timer names for scoped sudoers grants, quadlet-generated unit names, the installed unit/quadlet files (write ACLs), the config/state/log folders the install created, ownership entries for paths owned by install-created accounts, and `loginctl` linger users for rootless quadlets.
+
+```sh
+sudo cairn footprint --config ... --app myapp \
+    --report myapp-footprint.json --access-vars myapp-access.yml
+# or later, from the archived JSON:
+cairn access-vars myapp-footprint.json -o myapp-access.yml
+```
+
+WHO gets the access is deliberately not in the file — the operator passes `-e group_name=...` at apply time. Review the file before applying; it inherits the install-time caveat at the top of this document. The end-to-end workflow, the vars contract, and the security tradeoffs live in the linux-access repo (`docs/declarative-systemd-access.md` there); cairn only emits the vars.
 
 ## Windows
 

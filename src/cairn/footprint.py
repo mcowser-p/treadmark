@@ -956,7 +956,8 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
 
 def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
                   report_path: Optional[str] = None,
-                  quiet: bool = False) -> int:
+                  quiet: bool = False,
+                  access_vars_path: Optional[str] = None) -> int:
     try:
         if files_mod.IS_WINDOWS:
             model = build_model_windows(cfg, app_name)
@@ -982,6 +983,19 @@ def cmd_footprint(cfg: dict, app_name: Optional[str] = None,
                 _print_summary(model, report_path)
     else:
         print(body)
+
+    if access_vars_path:
+        if files_mod.IS_WINDOWS:
+            print("[!] --access-vars is Linux-only (Windows models have no "
+                  "systemd surface)", file=sys.stderr)
+            return 2
+        from . import accessvars
+        try:
+            accessvars.write_access_vars(model, access_vars_path, quiet=quiet)
+        except OSError as e:
+            print(f"[!] cannot write access vars {access_vars_path}: {e}",
+                  file=sys.stderr)
+            return 2
 
     return 1 if model["summary"]["files_added"] or model["summary"]["files_modified"] else 0
 
