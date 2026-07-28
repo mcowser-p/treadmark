@@ -137,12 +137,29 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Name of the application being profiled")
     pfp.add_argument("--report", metavar="PATH",
                      help="Write the model to PATH as JSON. Use '-' or omit for stdout.")
+    pfp.add_argument("--access-vars", metavar="PATH", dest="access_vars",
+                     help="Also write an Ansible vars YAML for the "
+                          "usc.declarative_access role: bare service/timer names, "
+                          "quadlet-generated units, unit files for write ACLs, and "
+                          "the config/state/log folders the install created. "
+                          "Review before applying; pass the team via "
+                          "-e group_name=... at apply time. Linux footprints only.")
     pfp.add_argument("--root", metavar="DIR",
                      help="Treat DIR as '/' (mounted image, container rootfs, chroot).")
     pfp.add_argument("--include-noise", action="store_true",
                      help="Windows: keep OS background-churn services (Defender, "
                           "time sync, the update/servicing stack). Off by default "
                           "so the footprint shows only what the installer did.")
+
+    # ----- access-vars (footprint JSON → Ansible vars for declarative_access) -----
+    pav = sub.add_parser("access-vars",
+                         help="Convert an existing footprint JSON into an Ansible "
+                              "vars file for the usc.declarative_access role "
+                              "(same output as `footprint --access-vars`)")
+    pav.add_argument("footprint_json",
+                     help="Footprint JSON produced by `cairn footprint --report`")
+    pav.add_argument("-o", "--out", metavar="PATH",
+                     help="Write the vars YAML to PATH. Use '-' or omit for stdout.")
 
     # ----- baseline (provenance / inspection) -----
     pb = sub.add_parser("baseline",
@@ -289,7 +306,11 @@ def main(argv: list[str] | None = None) -> int:
             print("[!] config has no `paths` configured.", file=sys.stderr)
             return 2
         return footprint_mod.cmd_footprint(cfg, app_name=args.app,
-                                           report_path=args.report)
+                                           report_path=args.report,
+                                           access_vars_path=args.access_vars)
+    if args.subsystem == "access-vars":
+        from . import accessvars
+        return accessvars.cmd_access_vars(args.footprint_json, args.out)
     return 2
 
 
