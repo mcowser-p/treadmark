@@ -53,7 +53,10 @@ paths:
   # Boot-time changes
   - /boot
 
-  # Uncomment if developers are expected to install into a home directory:
+  # Uncomment if developers are expected to install into a home directory,
+  # or run ROOTLESS podman quadlets (~/.config/containers/systemd/) — /home
+  # is required for rootless-quadlet capture and the linger_users list in
+  # `footprint --access-vars` output:
   # - /home
   # - /root
 

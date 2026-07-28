@@ -43,7 +43,8 @@ def test_summary_counts(footprint_model):
     s = model["summary"]
     assert s["files_added"] >= 5
     assert s["files_modified"] >= 2      # /etc/passwd and /etc/group
-    assert s["systemd_units"] == 2
+    assert s["systemd_units"] == 4       # 3 services + 1 timer
+    assert s["quadlets"] == 2            # rootful web + rootless sidecar
     assert s["cron_jobs"] == 1
     assert s["users_added"] == 2
     assert s["groups_added"] == 1
@@ -56,6 +57,8 @@ def test_added_files_present_with_categories(footprint_model):
     assert "/usr/bin/myapp" in [e["path"] for e in by_cat.get("binary", [])]
     unit_paths = [e["path"] for e in by_cat.get("systemd_unit", [])]
     assert "/etc/systemd/system/myapp.service" in unit_paths
+    quadlet_paths = [e["path"] for e in by_cat.get("quadlet", [])]
+    assert "/etc/containers/systemd/myapp-web.container" in quadlet_paths
 
 
 def test_unit_identity_and_capabilities_extracted(footprint_model):
@@ -65,6 +68,51 @@ def test_unit_identity_and_capabilities_extracted(footprint_model):
     assert units["myapp.service"]["capabilities"] == ["CAP_NET_BIND_SERVICE"]
     assert units["myapp.service"]["exec_start"] == ["/usr/bin/myapp --serve"]
     assert units["myapp-agent.service"]["user"] is None
+
+
+def test_timer_fields_and_activates(footprint_model):
+    model, _root = footprint_model
+    units = {u["name"]: u for u in model["services"]["systemd_units"]}
+    timer = units["myapp-maintenance.timer"]
+    assert timer["on_calendar"] == ["daily"]
+    assert timer["persistent"] is True
+    assert timer["activates"] == "myapp-maintenance.service"
+    # Modeled [Timer] keys no longer fall into the catch-all
+    assert not any(k.startswith("Timer.") for k in timer["other_directives"])
+
+
+def test_quadlets_in_services_section(footprint_model):
+    model, _root = footprint_model
+    quads = {q["name"]: q for q in model["services"]["quadlets"]}
+    web = quads["myapp-web.container"]
+    assert web["service_name"] == "myapp-web.service"
+    assert web["rootless"] is False and web["owner"] is None
+    assert web["image"] == "registry.example.com/myapp/web:1.0"
+    assert web["publish_ports"] == ["8080:80"]
+    assert web["container_user"] == "10001"
+    assert web["other_directives"]["Service.Restart"] == ["always"]
+
+
+def test_rootless_quadlet_owner_from_path(footprint_model):
+    model, _root = footprint_model
+    quads = {q["name"]: q for q in model["services"]["quadlets"]}
+    side = quads["myapp-rootless.container"]
+    assert side["rootless"] is True
+    assert side["owner"] == "dev1"
+    assert side["path"] == ("/home/dev1/.config/containers/systemd/"
+                            "myapp-rootless.container")
+
+
+def test_quadlet_access_hint(footprint_model):
+    model, _root = footprint_model
+    qh = [h for h in model["access_hints"]
+          if h.get("principal_type") == "quadlet"
+          and h["unit"] == "myapp-web.service"]
+    assert qh
+    assert qh[0]["rootless"] is False
+    needs = {n["path"]: n for n in qh[0]["needs"]}
+    assert "write" in needs["/var/lib/myapp"]["access"]      # Volume= host side
+    assert needs["/etc/myapp/web.env"]["access"] == "read"   # EnvironmentFile=
 
 
 def test_cron_job_parsed_with_user_field(footprint_model):
@@ -118,7 +166,8 @@ def test_access_hints_for_service_principal(footprint_model):
     model, _root = footprint_model
     svc_hints = [h for h in model["access_hints"]
                  if h.get("principal_type") == "systemd_service"
-                 and h["principal"] == "myapp"]
+                 and h["principal"] == "myapp"
+                 and h["unit"] == "myapp.service"]
     assert svc_hints
     needs = {n["path"]: n for n in svc_hints[0]["needs"]}
     assert "execute" in needs["/usr/bin/myapp"]["access"]

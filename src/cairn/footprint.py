@@ -101,6 +101,7 @@ def _collect_changes(cfg: dict) -> tuple[list, list, list, list[str]]:
 def _extract(added: list, modified: list) -> dict:
     """Pull parsed security objects out of the raw change lists."""
     systemd_units: list[sem.SystemdUnit] = []
+    quadlets: list[sem.QuadletUnit] = []
     cron_jobs: list[sem.CronJob] = []
     sudo_rules: list[sem.SudoRule] = []
     users_added: list[sem.UserEntry] = []
@@ -116,6 +117,9 @@ def _extract(added: list, modified: list) -> dict:
 
         if cat in ("systemd_unit", "systemd_dropin") and content:
             systemd_units.append(sem.parse_systemd_unit(rec.path, content))
+        elif cat == "quadlet" and content:
+            quadlets.append(sem.parse_quadlet(rec.path, content,
+                                              file_owner=rec.owner))
         elif cat == "cron_d" and content:
             cron_jobs.extend(sem.parse_cron(rec.path, content, "cron_d"))
         elif cat == "crontab_user" and content:
@@ -159,6 +163,9 @@ def _extract(added: list, modified: list) -> dict:
             sudo_rules.extend(sem.parse_sudoers(new.path, new_content))
         elif cat in ("systemd_unit", "systemd_dropin") and new_content:
             systemd_units.append(sem.parse_systemd_unit(new.path, new_content))
+        elif cat == "quadlet" and new_content:
+            quadlets.append(sem.parse_quadlet(new.path, new_content,
+                                              file_owner=new.owner))
         elif cat in ("cron_d", "crontab_system") and new_content:
             cron_jobs.extend(sem.parse_cron(new.path, new_content, cat))
         elif cat == "crontab_user" and new_content:
@@ -173,6 +180,7 @@ def _extract(added: list, modified: list) -> dict:
 
     return {
         "systemd_units": systemd_units,
+        "quadlets": quadlets,
         "cron_jobs": cron_jobs,
         "sudo_rules": sudo_rules,
         "users_added": users_added,
@@ -335,6 +343,32 @@ def _derive_access_hints(extracted: dict, added: list, modified: list) -> list[d
                  "source": n["sources"][0] if "sources" in n else n.get("source", "")}
                 for n in needs
             ]),
+        })
+
+    # Quadlet-defined containers are principals too: podman generates a
+    # .service per file, and the host-side mounts/env files it declares are
+    # the paths a policy needs to know about. Image= is not a host path and
+    # [Container] User= is container-internal, so neither becomes evidence.
+    for q in extracted["quadlets"]:
+        needs = []
+        for v in q.volumes:
+            host_side = v.split(":", 1)[0]
+            if host_side.startswith("/"):
+                needs.append({"path": host_side, "access": "read,write",
+                              "source": "quadlet:Volume"})
+        for ef in q.environment_files:
+            p = ef.lstrip("-")
+            if p.startswith("/"):
+                needs.append({"path": p, "access": "read",
+                              "source": "quadlet:EnvironmentFile"})
+        hints.append({
+            "principal": q.owner or "root",
+            "principal_type": "quadlet",
+            "unit": q.service_name,
+            "quadlet_file": q.name,
+            "rootless": q.rootless,
+            "image": q.image,
+            "needs": _dedupe_needs(needs),
         })
 
     return hints
@@ -525,6 +559,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
             "files_modified": len(modified),
             "files_deleted": len(deleted),
             "systemd_units": len(extracted["systemd_units"]),
+            "quadlets": len(extracted["quadlets"]),
             "cron_jobs": len(extracted["cron_jobs"]),
             "users_added": len(extracted["users_added"]),
             "groups_added": len(extracted["groups_added"]),
@@ -541,6 +576,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
         },
         "services": {
             "systemd_units": [asdict(u) for u in extracted["systemd_units"]],
+            "quadlets": [asdict(q) for q in extracted["quadlets"]],
         },
         "scheduled": {
             "cron_jobs": [asdict(j) for j in extracted["cron_jobs"]],
@@ -986,7 +1022,8 @@ def _print_summary(model: dict, path: str) -> None:
     s = model["summary"]
     print(f"\nInstall footprint for '{model['application']}' on {model['host']}")
     print(f"  files:      +{s['files_added']} added, ~{s['files_modified']} modified")
-    print(f"  services:   {s['systemd_units']} systemd unit(s), {s['cron_jobs']} cron job(s)")
+    print(f"  services:   {s['systemd_units']} systemd unit(s), {s['quadlets']} quadlet(s), "
+          f"{s['cron_jobs']} cron job(s)")
     print(f"  principals: {s['users_added']} user(s), {s['groups_added']} group(s), "
           f"{s['membership_changes']} membership change(s)")
     print(f"  privilege:  {s['sudo_rules']} sudoers rule(s), {s['executables']} executable(s)")
