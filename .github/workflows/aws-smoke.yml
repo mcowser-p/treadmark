@@ -1,0 +1,74 @@
+# .github/workflows/aws-smoke.yml
+#
+# On-demand EC2 AMI smoke: runs scripts/smoke-aws.sh against real AWS images
+# (AL2023 x86_64/Graviton, Ubuntu 24.04, AlmaLinux 9/10, Windows Server
+# 2022/2025). workflow_dispatch ONLY — this launches real instances (costs
+# money, needs AWS credentials), so it must never run on PRs or pushes.
+#
+# One-time setup (docs/aws-smoke.md): create the OIDC role + run
+# `smoke-aws.sh setup` in the target account, then set the repo variables
+# AWS_SMOKE_ROLE_ARN and (optionally) AWS_SMOKE_REGION.
+
+name: aws-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Comma-separated platform list, or "all" (al2023, al2023-arm64, ubuntu-2404, alma9, alma10, win2022, win2025)'
+        default: 'all'
+      release_tag:
+        description: 'Release tag to test (empty = latest release)'
+        default: ''
+      extended:
+        description: 'Also run the footprint capture set (slower)'
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write     # OIDC to assume the AWS role
+  contents: read      # gh release download
+
+concurrency:
+  group: aws-smoke
+  cancel-in-progress: false   # never orphan instances mid-run
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_SMOKE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_SMOKE_REGION || 'us-east-1' }}
+          # Presigned URLs are only used in the first minutes of a run, but
+          # --extended legs can run ~45 min — keep the session comfortably
+          # longer than the slowest leg.
+          role-duration-seconds: 3600
+
+      - name: run the EC2 AMI smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/smoke-aws.sh \
+            --platforms "${{ inputs.platforms }}" \
+            ${{ inputs.release_tag && format('--release {0}', inputs.release_tag) || '' }} \
+            ${{ inputs.extended && '--extended' || '' }}
+
+      # Logs, status markers, console dumps, and any footprint models —
+      # uploaded even on failure; that's when they matter most.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aws-smoke-out
+          path: smoke-out/aws/
+          if-no-files-found: ignore
+
+      # The driver's teardown trap cleans up on success AND failure; a
+      # cancelled run can skip it, so sweep then. Not on every run — a
+      # 0-hour sweep would also kill instances from a concurrent local run.
+      - name: sweep stragglers
+        if: cancelled()
+        run: bash scripts/smoke-aws.sh sweep --hours 0 || true

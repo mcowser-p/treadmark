@@ -1,4 +1,4 @@
-# scripts/smoke-test.ps1 — artifact-level smoke test, run on a Windows host
+﻿# scripts/smoke-test.ps1 — artifact-level smoke test, run on a Windows host
 # (a windows-latest CI runner) with the built MSI in dist\.
 #
 # Installs the MSI, validates the packaged layout, walks a full operator
@@ -14,6 +14,10 @@ function Fail($m) { Write-Error "[SMOKE FAIL] $m"; exit 1 }
 
 $exe = "$env:ProgramFiles\Cairn\cairn.exe"
 $cfg = "$env:ProgramData\Cairn\cairn.yaml"
+
+# Windows Server AMIs (EC2) ship without winget — every winget-dependent
+# capture below checks this and skips cleanly instead of erroring five times.
+$HasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
 
 # ---------------------------------------------------------------------------
 # 1. Install the MSI
@@ -230,12 +234,14 @@ Summarize $model "IIS (Web-Server role)"
 Step "footprint(datadog): re-baseline, then install via winget (config-less)"
 & $exe all init --config $fpCfg --force | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "footprint re-baseline failed" }
-$ddOk = $true
-try {
-    winget install --id Datadog.Agent --silent --accept-package-agreements `
-        --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { $ddOk = $false }
-} catch { $ddOk = $false }
+$ddOk = $HasWinget
+if ($HasWinget) {
+    try {
+        winget install --id Datadog.Agent --silent --accept-package-agreements `
+            --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { $ddOk = $false }
+    } catch { $ddOk = $false }
+}
 
 if ($ddOk) {
     # Same settle window: give the agent's 11 services time to finish
@@ -279,7 +285,7 @@ if ($ddOk) {
 # These footprints feed the windows-<ver>-<app> runbooks in
 # smoke-out/runbooks/ (least-privilege reports), like the Linux app set.
 # ---------------------------------------------------------------------------
-if ($env:SMOKE_EXTENDED) {
+if ($env:SMOKE_EXTENDED -and $HasWinget) {
     $extApps = @(
         @{ Name = "postgresql"; WingetId = "PostgreSQL.PostgreSQL.16"
            Paths = @("C:\Program Files\PostgreSQL") }
@@ -337,6 +343,8 @@ if ($env:SMOKE_EXTENDED) {
             Remove-Item $appFp -ErrorAction SilentlyContinue
         }
     }
+} elseif ($env:SMOKE_EXTENDED) {
+    Write-Host "`n[i] winget not available on this image (Windows Server AMI?) — skipping extended app captures"
 } else {
     Write-Host "`n[i] SMOKE_EXTENDED not set — skipping extended app captures (postgresql, chrome, 7zip, podman, sqlexpress)"
 }

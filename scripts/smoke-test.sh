@@ -165,6 +165,13 @@ for p in /cairn-smoke-newtop \
 done
 echo "    full tree captured (dirs + nested files + executable)"
 
+# SMOKE_FOOTPRINT=0 skips the package-install footprint captures below (all
+# of section 4). Used by the EC2 AMI harness (scripts/smoke-aws.sh), where
+# the core install→baseline→drift cycle is the platform-confirmation goal
+# and footprints are opt-in. Default 1 keeps every existing caller (CI,
+# release, smoke-local, smoke-vm) unchanged.
+if [ "${SMOKE_FOOTPRINT:-1}" = "1" ]; then
+
 # ---------------------------------------------------------------------------
 # 4. Footprint capture of real package installs — the core use case.
 # Fresh baseline → install a package from the distro repos → `cairn
@@ -372,6 +379,10 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
                 '"podman.socket"' '/usr/bin/podman' '/etc/containers'
         fi
     fi
+fi
+
+else
+    step "footprint captures skipped (SMOKE_FOOTPRINT=0)"
 fi
 
 # ---------------------------------------------------------------------------

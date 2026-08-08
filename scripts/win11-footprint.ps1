@@ -1,4 +1,4 @@
-# scripts/win11-footprint.ps1
+﻿# scripts/win11-footprint.ps1
 #
 # Windows 11 (arm64 runner) footprint captures: install the common-desktop
 # app set via winget and capture what each did. cairn runs from the
