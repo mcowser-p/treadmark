@@ -1,4 +1,4 @@
-# scripts/bootstrap.ps1
+﻿# scripts/bootstrap.ps1
 # One-shot setup for a fresh clone of cairn on Windows.
 
 $ErrorActionPreference = "Stop"

@@ -1,0 +1,109 @@
+#!/bin/bash
+# packaging/aws/userdata-linux.sh.in — cloud-init user-data template for the
+# EC2 AMI smoke harness (scripts/smoke-aws.sh). Runs as root at boot on the
+# target AMI. __DOUBLE_UNDERSCORE__ tokens are substituted by the driver.
+#
+# Contract with the driver (zero-ingress design — no SSH/SSM):
+#   1. download the artifact + smoke-test.sh via PRESIGNED URLs (no creds),
+#   2. run the smoke,
+#   3. upload smoke.log + status.json to s3://__BUCKET__/__RESULTS_PREFIX__/
+#      using the cairn-smoke-instance role (put-only),
+#   4. echo "CAIRN-SMOKE-RESULT: <platform> <rc>" to the serial console —
+#      the driver's fallback signal when the S3 upload path is unavailable,
+#   5. shut down; the instance's shutdown-behavior=terminate does the rest.
+set -u
+
+PLATFORM="__PLATFORM__"
+REGION="__REGION__"
+BUCKET="__BUCKET__"
+RESULTS_PREFIX="__RESULTS_PREFIX__"
+WORK=/opt/cairn-smoke
+RC=99
+PHASE=bootstrap
+
+mkdir -p "$WORK/dist" "$WORK/results"
+# Everything below lands in the log file AND the serial console (fallback
+# diagnostics when the instance never manages to upload).
+exec > >(tee "$WORK/smoke.log" /dev/console) 2>&1
+
+imds() {  # IMDSv2 GET helper
+    tok=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+    curl -sS -H "X-aws-ec2-metadata-token: $tok" \
+        "http://169.254.169.254/latest/meta-data/$1"
+}
+
+s3put() {  # s3put <local-file> <key> — instance-role creds, no SDK needed
+    [ -f "$1" ] || return 0
+    if command -v aws >/dev/null 2>&1; then
+        aws s3 cp --region "$REGION" --only-show-errors "$1" "s3://$BUCKET/$2"
+        return $?
+    fi
+    # No AWS CLI on this AMI (Ubuntu/Alma): raw SigV4 PUT via curl >= 7.75.
+    role=$(imds "iam/security-credentials/")
+    creds=$(imds "iam/security-credentials/$role")
+    ak=$(printf '%s' "$creds"  | sed -n 's/.*"AccessKeyId"[^"]*"\([^"]*\)".*/\1/p')
+    sk=$(printf '%s' "$creds"  | sed -n 's/.*"SecretAccessKey"[^"]*"\([^"]*\)".*/\1/p')
+    st=$(printf '%s' "$creds"  | sed -n 's/.*"Token"[^"]*"\([^"]*\)".*/\1/p')
+    curl -sS -f --connect-timeout 20 --aws-sigv4 "aws:amz:$REGION:s3" --user "$ak:$sk" \
+        -H "x-amz-security-token: $st" \
+        -T "$1" "https://$BUCKET.s3.$REGION.amazonaws.com/$2"
+}
+
+finish() {
+    printf '{"platform": "%s", "result": "%s", "exit_code": %d, "phase": "%s", "pretty_name": "%s"}\n' \
+        "$PLATFORM" "$([ "$RC" -eq 0 ] && echo PASS || echo FAIL)" "$RC" "$PHASE" \
+        "$(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-unknown}")" \
+        > "$WORK/status.json"
+    s3put "$WORK/smoke.log"    "$RESULTS_PREFIX/smoke.log"    || echo "[!] log upload failed"
+    for f in "$WORK"/results/footprint-*.json; do
+        [ -f "$f" ] && s3put "$f" "$RESULTS_PREFIX/$(basename "$f")"
+    done
+    # status.json goes LAST — its appearance tells the driver the leg is done
+    # and every other object is already in place.
+    s3put "$WORK/status.json"  "$RESULTS_PREFIX/status.json"  || echo "[!] status upload failed"
+    echo "CAIRN-SMOKE-RESULT: $PLATFORM $RC"
+    sync
+    if [ "__KEEP__" != "1" ]; then
+        shutdown -h now
+    fi
+}
+trap finish EXIT
+
+echo ">>> cairn-smoke leg: $PLATFORM ($(uname -m))"
+
+# EL9-era curl (7.76) predates reliable --aws-sigv4, and neither the Alma
+# nor Ubuntu AMIs ship the AWS CLI — bootstrap CLI v2 when curl is too old
+# so the results upload has a solid path. Best-effort: the curl fallback
+# and the console marker still exist if this fails.
+if ! command -v aws >/dev/null 2>&1; then
+    CURL_MAJOR=$(curl -V 2>/dev/null | sed -n 's/^curl \([0-9]*\)\..*/\1/p' | head -n1)
+    if [ "${CURL_MAJOR:-0}" -lt 8 ]; then
+        echo ">>> old curl (${CURL_MAJOR}.x) — installing AWS CLI v2 for the upload path"
+        command -v unzip >/dev/null 2>&1 || dnf install -qy unzip >/dev/null 2>&1 \
+            || apt-get install -qy unzip >/dev/null 2>&1 || true
+        curl -fsSL --connect-timeout 20 --retry 3 -o /tmp/awscliv2.zip \
+            "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" \
+            && unzip -q /tmp/awscliv2.zip -d /tmp \
+            && /tmp/aws/install >/dev/null 2>&1 \
+            || echo "[!] aws cli bootstrap failed — will fall back to curl sigv4"
+    fi
+fi
+
+PHASE=download
+# --connect-timeout keeps a dead egress path failing in ~2 min (visible on
+# the serial console), not hanging until the driver's 20-minute timeout.
+curl -fsSL --connect-timeout 20 --retry 5 --retry-delay 5 \
+    -o "$WORK/dist/__ARTIFACT_FILE__" "__ARTIFACT_URL__" \
+    || { echo "[!] artifact download failed"; exit 1; }
+curl -fsSL --connect-timeout 20 --retry 5 --retry-delay 5 \
+    -o "$WORK/smoke-test.sh" "__SMOKE_URL__" \
+    || { echo "[!] smoke-test.sh download failed"; exit 1; }
+
+PHASE=smoke
+DIST_DIR="$WORK/dist" FOOTPRINT_DIR="$WORK/results" \
+    SMOKE_FOOTPRINT="__SMOKE_FOOTPRINT__" SMOKE_EXTENDED="__SMOKE_EXTENDED__" \
+    bash "$WORK/smoke-test.sh"
+RC=$?
+PHASE=done
+exit "$RC"

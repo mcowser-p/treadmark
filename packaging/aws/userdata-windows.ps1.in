@@ -1,0 +1,79 @@
+<powershell>
+# packaging/aws/userdata-windows.ps1.in - EC2Launch v2 user-data template for
+# the EC2 AMI smoke harness (scripts/smoke-aws.sh). EC2Launch runs it as
+# Administrator at first boot on Windows Server 2022/2025 AMIs.
+# __DOUBLE_UNDERSCORE__ tokens are substituted by the driver.
+#
+# KEEP THIS FILE PURE ASCII: EC2Launch feeds it to Windows PowerShell 5.1
+# with no BOM, which decodes it as ANSI - a UTF-8 em-dash turns into a
+# smart quote (0x94) that PS 5.1 treats as a string delimiter and the
+# whole script parse-bombs. (This is also why the repo *.ps1 carry BOMs.)
+#
+# Same contract as the Linux template: presigned downloads (no creds), run
+# scripts/smoke-test.ps1, upload log + status.json with the instance role
+# (AWS Tools for PowerShell are preinstalled on Amazon Windows AMIs -
+# monolithic AWSPowerShell on 2022, modular AWS.Tools on 2025), echo the
+# console fallback line, shut down (shutdown-behavior=terminate).
+$ErrorActionPreference = "Continue"
+$Platform = "__PLATFORM__"
+$Region   = "__REGION__"
+$Bucket   = "__BUCKET__"
+$Prefix   = "__RESULTS_PREFIX__"
+$Work     = "C:\cairn-smoke"
+$rc       = 99
+$phase    = "bootstrap"
+
+New-Item -ItemType Directory -Force -Path "$Work\dist" | Out-Null
+Start-Transcript -Path "$Work\smoke.log" -Force | Out-Null
+
+try {
+    Write-Host ">>> cairn-smoke leg: $Platform"
+
+    $phase = "download"
+    Invoke-WebRequest -Uri "__ARTIFACT_URL__" -OutFile "$Work\dist\__ARTIFACT_FILE__" -UseBasicParsing
+    Invoke-WebRequest -Uri "__SMOKE_URL__"    -OutFile "$Work\smoke-test.ps1"          -UseBasicParsing
+
+    $phase = "smoke"
+    # smoke-test.ps1 expects the MSI in .\dist\. Set-Location only moves the
+    # PowerShell location - a child process inherits the PROCESS cwd, and
+    # EC2Launch starts us in system32 - so pin the process cwd too. Piping
+    # through Out-Host is what lands the child's output in this transcript
+    # (Start-Transcript does not capture child-process output on its own).
+    Set-Location $Work
+    [Environment]::CurrentDirectory = $Work
+    if ("__SMOKE_EXTENDED__" -eq "1") { $env:SMOKE_EXTENDED = "1" }
+    powershell -ExecutionPolicy Bypass -File "$Work\smoke-test.ps1" 2>&1 | Out-Host
+    $rc = $LASTEXITCODE
+    $phase = "done"
+} catch {
+    Write-Host "[!] $($_.Exception.Message)"
+    if ($rc -eq 99) { $rc = 98 }
+} finally {
+    Stop-Transcript | Out-Null
+
+    $result = if ($rc -eq 0) { "PASS" } else { "FAIL" }
+    $os = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
+    @{ platform = $Platform; result = $result; exit_code = $rc; phase = $phase
+       pretty_name = "$os" } | ConvertTo-Json -Compress |
+        Out-File -FilePath "$Work\status.json" -Encoding ascii
+
+    # Whichever AWS PowerShell flavor this AMI ships; cmdlet names match.
+    Import-Module AWSPowerShell   -ErrorAction SilentlyContinue
+    Import-Module AWS.Tools.S3    -ErrorAction SilentlyContinue
+    try {
+        Write-S3Object -BucketName $Bucket -Key "$Prefix/smoke.log"   -File "$Work\smoke.log"   -Region $Region
+        Get-ChildItem "$Work\footprint-windows-*.json" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-S3Object -BucketName $Bucket -Key "$Prefix/$($_.Name)" -File $_.FullName -Region $Region
+        }
+        # status.json LAST - the driver treats its appearance as leg-complete.
+        Write-S3Object -BucketName $Bucket -Key "$Prefix/status.json" -File "$Work\status.json" -Region $Region
+    } catch {
+        Write-Host "[!] S3 upload failed: $($_.Exception.Message)"
+    }
+
+    Write-Host "CAIRN-SMOKE-RESULT: $Platform $rc"
+    if ("__KEEP__" -ne "1") {
+        Stop-Computer -Force
+    }
+}
+</powershell>

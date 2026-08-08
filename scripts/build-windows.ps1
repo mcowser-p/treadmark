@@ -1,4 +1,4 @@
-# scripts/build-windows.ps1
+﻿# scripts/build-windows.ps1
 # Run on a Windows host with .NET SDK 6+ and MSVC (VS Build Tools) installed.
 # Produces:
 #   dist\cairn-windows-x86_64.exe   (Nuitka-compiled single-file binary)

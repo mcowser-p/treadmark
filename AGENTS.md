@@ -46,7 +46,9 @@ CI runs `pytest` on Python 3.9, 3.12, and 3.13 and gates both the PR build
 and the release job on it; a distro smoke matrix (ubuntu:24.04,
 almalinux:10, amazonlinux:2023) then installs the built packages and gates
 release publishing. `scripts/smoke-vm.sh` is the occasional full-VM pass
-via Lima.
+via Lima. `bash scripts/smoke-aws.sh` runs the smoke on REAL EC2 instances
+(AL2023 incl. Graviton, Ubuntu 24.04, Alma 9/10, Windows Server 2022/2025)
+— see docs/aws-smoke.md; needs AWS credentials, costs real (tiny) money.
 
 ## Commits and PRs (this is how releases get triggered)
 
