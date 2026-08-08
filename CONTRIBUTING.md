@@ -91,7 +91,8 @@ pytest
 bash scripts/build-linux.sh
 
 # Optional: install + exercise the built .deb/.rpm on real target distros
-# (ubuntu:24.04, almalinux:10 — needs docker or podman; works on macOS)
+# (ubuntu:24.04, almalinux:10, amazonlinux:2023 — needs docker or podman;
+#  works on macOS)
 bash scripts/smoke-local.sh
 
 # Enable commit-message enforcement once per clone

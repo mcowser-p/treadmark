@@ -196,7 +196,7 @@ them — but they must be replaced before a release goes public:
 
 In rough priority order:
 
-1. **Smoke-test job in CI.** ✅ Done — `scripts/smoke-test.sh` runs in ubuntu:24.04 + almalinux:10 containers on every PR (`ci.yml`) and gates release artifact publishing on both arches (`release.yml`). Run locally with `bash scripts/smoke-local.sh`; full-VM pass (SELinux-enforcing Alma) with `bash scripts/smoke-vm.sh`. To widen distro coverage, add images to the workflow matrices and `SMOKE_IMAGES`.
+1. **Smoke-test job in CI.** ✅ Done — `scripts/smoke-test.sh` runs in ubuntu:24.04 + almalinux:10 + amazonlinux:2023 containers on every PR (`ci.yml`) and gates release artifact publishing on both arches (`release.yml`). Run locally with `bash scripts/smoke-local.sh`; full-VM pass (SELinux-enforcing Alma) with `bash scripts/smoke-vm.sh`. To widen distro coverage, add images to the workflow matrices and `SMOKE_IMAGES`.
 2. **Your own apt/yum repo.** `apt install cairn` from your domain. Use `aptly` (Debian) and `createrepo` (RPM) on S3+CloudFront, or GitHub Pages for very small fleets.
 3. **The Windows half end-to-end.** The .wxs is structurally correct but the MSI hasn't been built on a real Windows host yet. First time `scripts/build-windows.ps1` runs on Windows is when you'll find out if anything's off.
 

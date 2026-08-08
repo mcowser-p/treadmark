@@ -8,14 +8,15 @@
 #   bash scripts/smoke-local.sh --rebuild    # force a fresh artifact build
 #   SMOKE_IMAGES="almalinux:10" bash scripts/smoke-local.sh   # subset
 #
-# Targets default to Ubuntu 24.04 LTS and AlmaLinux 10 (RHEL 10 family).
+# Targets default to Ubuntu 24.04 LTS, AlmaLinux 10 (RHEL 10 family), and
+# Amazon Linux 2023.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO=$(pwd)
 
-BUILD_IMAGE="ubuntu:24.04"
-SMOKE_IMAGES="${SMOKE_IMAGES:-ubuntu:24.04 almalinux:10}"
+BUILD_IMAGE="almalinux:9"
+SMOKE_IMAGES="${SMOKE_IMAGES:-ubuntu:24.04 almalinux:10 amazonlinux:2023}"
 
 if command -v docker >/dev/null 2>&1; then
     RUNTIME=docker
@@ -28,9 +29,13 @@ fi
 
 # ---------------------------------------------------------------------------
 # Stage 1: build artifacts inside a Linux container (macOS can't run
-# dpkg-deb/rpmbuild/PyInstaller-for-linux natively). Produces artifacts for
+# dpkg-deb/rpmbuild/Nuitka-for-linux natively). Produces artifacts for
 # the container architecture — arm64 on Apple Silicon, matching the test
 # images below.
+#
+# almalinux:9 on purpose, matching CI: the Nuitka binary takes the build
+# host's glibc floor (see build-binary-linux.sh), and EL9's glibc 2.34 is
+# the oldest among the supported targets. dpkg-deb comes from EPEL there.
 # ---------------------------------------------------------------------------
 have_artifacts() {
     ls dist/cairn_*.deb >/dev/null 2>&1 && ls dist/cairn-*.rpm >/dev/null 2>&1
@@ -39,10 +44,10 @@ have_artifacts() {
 if [ "${1:-}" = "--rebuild" ] || ! have_artifacts; then
     echo ">>> building artifacts in $BUILD_IMAGE ($RUNTIME)"
     "$RUNTIME" run --rm -v "$REPO":/src -w /src "$BUILD_IMAGE" bash -ec '
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq
-        apt-get install -qq -y python3 python3-pip python3-venv \
-            dpkg-dev rpm binutils file >/dev/null
+        dnf install -qy epel-release >/dev/null
+        dnf install -qy python3.12 python3.12-pip python3.12-devel \
+            gcc make dpkg rpm-build binutils file git-core >/dev/null
+        ln -sf /usr/bin/python3.12 /usr/local/bin/python3
         bash scripts/bootstrap.sh
         bash scripts/build-linux.sh
     '

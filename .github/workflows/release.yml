@@ -101,27 +101,35 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    # Build inside the OLDEST supported glibc (EL9, 2.34): Nuitka binaries
+    # take the build host's versioned glibc symbols, so building on the
+    # runner's Ubuntu 24.04 (glibc 2.39) produced binaries that died on
+    # Amazon Linux 2023 / EL9 with "GLIBC_2.38 not found". almalinux:9 sets
+    # the floor; the smoke matrix proves it on every target family.
+    container: almalinux:9
     steps:
+      - name: install build tooling (el9 container)
+        run: |
+          dnf install -qy epel-release          # dpkg (for dpkg-deb) lives in EPEL
+          dnf install -qy python3.12 python3.12-pip python3.12-devel \
+              gcc make dpkg rpm-build binutils file git-core
+          # Build scripts call plain python3 (and the stamp step below calls
+          # python); EL9's default python3 is 3.9.
+          ln -sf /usr/bin/python3.12 /usr/local/bin/python3
+          ln -sf /usr/bin/python3.12 /usr/local/bin/python
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
       # No tag exists yet — stamp the computed version into the working tree
       # so the .deb/.rpm metadata and `cairn --version` report it.
       - name: stamp the release version
         run: python scripts/stamp_version.py "${{ needs.version.outputs.version }}"
 
-      - name: install rpm tooling
-        run: sudo apt-get update && sudo apt-get install -y rpm
-
       # Nuitka compiles C — cache its work dir so warm builds are fast.
       - name: cache nuitka
         uses: actions/cache@v4
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ matrix.arch }}
+          key: nuitka-el9-${{ matrix.arch }}
 
       # No wheel: a wheel is a zip of the literal source; publishing it
       # would defeat the compiled (Nuitka) binaries.
@@ -255,7 +263,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ['ubuntu:24.04', 'almalinux:10']
+        image: ['ubuntu:24.04', 'almalinux:10', 'amazonlinux:2023']
         arch: [x86_64, aarch64]
         # `name` is the artifact-safe form of `image` (no ':' allowed).
         include:
@@ -263,9 +271,16 @@ jobs:
             name: ubuntu-24.04
           - image: 'almalinux:10'
             name: almalinux-10
+          - image: 'amazonlinux:2023'
+            name: amazonlinux-2023
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     container: ${{ matrix.image }}
     steps:
+      # amazonlinux:2023 ships without tar/gzip, which actions/checkout needs
+      # for its no-git tarball fallback (the ubuntu/almalinux images have them).
+      - name: prepare amazonlinux container
+        if: matrix.image == 'amazonlinux:2023'
+        run: dnf install -qy tar gzip
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
