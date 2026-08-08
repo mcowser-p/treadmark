@@ -6,6 +6,13 @@
 # package to C and compiles it, so the shipped binary contains machine
 # code, not .pyc payloads. Strings (messages, SQL) remain visible — the
 # protected part is the logic.
+#
+# BUILD HOST SETS THE GLIBC FLOOR: the compiled binary takes the build
+# host's versioned glibc symbols, so it only runs on distros with glibc >=
+# the build host's. Release/CI builds run in an almalinux:9 container
+# (glibc 2.34) so the artifacts run on EL9, EL10, Amazon Linux 2023, and
+# Ubuntu 24.04. Building on a newer distro (e.g. Ubuntu 24.04, glibc 2.39)
+# produces binaries that die on AL2023/EL9 with "GLIBC_2.38 not found".
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

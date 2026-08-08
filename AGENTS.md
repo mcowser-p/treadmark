@@ -38,13 +38,15 @@ pytest                      # must be green before any PR — ~1s, no excuses
 bash scripts/build-linux.sh # full artifact build (needs dpkg-deb/rpmbuild)
 bash scripts/smoke-local.sh # artifact-level check: builds in a container,
                             # installs + exercises the .deb/.rpm on
-                            # ubuntu:24.04 and almalinux:10 (docker/podman)
+                            # ubuntu:24.04, almalinux:10, and
+                            # amazonlinux:2023 (docker/podman)
 ```
 
 CI runs `pytest` on Python 3.9, 3.12, and 3.13 and gates both the PR build
 and the release job on it; a distro smoke matrix (ubuntu:24.04,
-almalinux:10) then installs the built packages and gates release
-publishing. `scripts/smoke-vm.sh` is the occasional full-VM pass via Lima.
+almalinux:10, amazonlinux:2023) then installs the built packages and gates
+release publishing. `scripts/smoke-vm.sh` is the occasional full-VM pass
+via Lima.
 
 ## Commits and PRs (this is how releases get triggered)
 

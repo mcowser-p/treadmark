@@ -33,11 +33,16 @@ cp packaging/cairn.spec "$TOPDIR/SPECS/cairn.spec"
 
 CHANGELOG_DATE=$(LC_ALL=C date '+%a %b %d %Y')
 
+# %dist is pinned empty so the artifact keeps its distro-neutral name
+# (cairn-X.Y.Z-1.<arch>.rpm) regardless of build host. The binary targets a
+# glibc FLOOR (built on EL9 — see build-binary-linux.sh), not one distro;
+# a .el9 tag would misread as "EL9-only".
 rpmbuild \
     --define "_topdir $TOPDIR" \
     --define "_version $VERSION" \
     --define "_target_arch $RPM_ARCH" \
     --define "_changelog_date $CHANGELOG_DATE" \
+    --define "dist %{nil}" \
     --target "$RPM_ARCH" \
     -bb "$TOPDIR/SPECS/cairn.spec"
 

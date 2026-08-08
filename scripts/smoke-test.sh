@@ -290,13 +290,22 @@ if command -v apt-get >/dev/null 2>&1; then
 else
     # ----- RHEL family (lighttpd is EPEL-only — skipped; Redis was
     # replaced by Valkey in RHEL 10) -----
+    # Amazon Linux 2023 versions its database packages and ships no generic
+    # alias (dnf can't resolve mariadb-server/postgresql-server there). The
+    # units, service accounts, and config paths match the RHEL packages, so
+    # only the package NAME changes — the assertions stay identical.
+    if [ "${ID:-}" = "amzn" ]; then
+        MARIADB_PKG=mariadb105-server; POSTGRES_PKG=postgresql16-server
+    else
+        MARIADB_PKG=mariadb-server;    POSTGRES_PKG=postgresql-server
+    fi
     capture_footprint apache httpd \
         '"httpd.service"' '/usr/sbin/httpd' '/etc/httpd' '"service_runs_as_root"'
     capture_footprint haproxy haproxy \
         '"haproxy.service"' '/usr/sbin/haproxy' '/etc/haproxy'
-    capture_footprint mariadb mariadb-server \
+    capture_footprint mariadb "$MARIADB_PKG" \
         '"mariadb.service"' '"name": "mysql"' '/etc/my.cnf'
-    capture_footprint postgresql postgresql-server \
+    capture_footprint postgresql "$POSTGRES_PKG" \
         '"postgresql.service"' '"name": "postgres"' '"user": "postgres"'
     capture_footprint valkey valkey \
         '"valkey.service"' '/usr/bin/valkey-server' '/etc/valkey'
@@ -324,7 +333,8 @@ fi
 # Not covered on purpose: Grafana Alloy, telegraf, filebeat, zabbix
 # (vendor repos only — this suite tests default-repo packages);
 # open-vm-tools (x86-oriented, spotty on aarch64 repos); fail2ban on
-# RHEL-family (EPEL-only there).
+# RHEL-family (EPEL-only there); podman on Amazon Linux 2023 (not in
+# the AL2023 repos — AL2023 ships docker instead).
 # ---------------------------------------------------------------------------
 if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
     if command -v apt-get >/dev/null 2>&1; then
@@ -355,8 +365,12 @@ if [ "${SMOKE_EXTENDED:-0}" = "1" ]; then
             '"autofs.service"' '/etc/auto'
         capture_footprint snmpd net-snmp \
             '"snmpd.service"' '/etc/snmp'
-        capture_footprint podman podman \
-            '"podman.socket"' '/usr/bin/podman' '/etc/containers'
+        if [ "${ID:-}" = "amzn" ]; then
+            step "footprint(podman): skipped — podman is not in the AL2023 repos"
+        else
+            capture_footprint podman podman \
+                '"podman.socket"' '/usr/bin/podman' '/etc/containers'
+        fi
     fi
 fi
 
