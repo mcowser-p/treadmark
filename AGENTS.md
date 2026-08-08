@@ -127,13 +127,15 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
   Services subtree and tasks from Task XML). Still unbuilt: COM registration,
   firewall rules, and local account/group enumeration (Windows accounts live
   in the SAM, not a readable file) — the next gaps.
-- Cloud drift (`cairn aws`, `src/cairn/awsmon.py`): the third subsystem —
-  baseline/scan/diff of AWS account config, SARIF output, `boto3` as the
-  optional `cairn[aws]` extra (core stays zero-hard-dep). v1 ships six curated
-  drivers (iam/s3/ec2/cloudtrail/kms/lambda) in a `DRIVERS` registry; broaden
-  by adding drivers, not plumbing. Volatile-field stripping is the denoise
-  lever (like `NOISE_SERVICES`). **Bookmarked, not built:** multi-account org
-  fan-out, and other clouds (Azure `azmon` / GCP `gcpmon` / k8s) — same record
-  model + SARIF renderer, provider-specific collectors. See
-  docs/cloud-workflow.md. GitHub alert-workflow wiring is intentionally
-  deferred (SARIF output only for now).
+- Cloud drift (`src/cairn/awsmon.py`): **DORMANT** — the `cairn aws`
+  subcommand, its dispatch, and the `aws` pyproject extra (plus boto3 in
+  `all`) are commented out pending validation against a real AWS account.
+  The module and its fake-client unit tests (`tests/test_awsmon.py`) remain
+  and must stay green and import-safe without boto3 — azmon/gcpmon/k8smon
+  import `DEFAULT_VOLATILE_FIELDS`/`canonicalize` from it. Design notes:
+  six curated drivers (iam/s3/ec2/cloudtrail/kms/lambda) in a `DRIVERS`
+  registry — broaden by adding drivers, not plumbing; volatile-field
+  stripping is the denoise lever (like `NOISE_SERVICES`). One tier below:
+  Azure `azmon` / GCP `gcpmon` / k8s `k8smon` are untested scaffolds.
+  **Bookmarked, not built:** multi-account org fan-out, GitHub
+  alert-workflow wiring. See docs/cloud-workflow.md.

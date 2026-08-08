@@ -1,5 +1,9 @@
 # cairn-aws.yaml — example config for the AWS drift monitor.
 #
+# ⚠ DORMANT — the `cairn aws` subcommand is currently unwired (scaffold
+# pending real-account validation; see docs/cloud-workflow.md). Kept for
+# when that validation lands.
+#
 # Requires the aws extra:   pip install "cairn[aws]"
 # Credentials come from the standard boto3 chain (profile below, or
 # AWS_PROFILE / AWS_ACCESS_KEY_* env vars, or an instance/task role).

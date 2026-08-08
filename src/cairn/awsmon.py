@@ -1,4 +1,11 @@
-"""cairn.awsmon — AWS account-configuration integrity monitor.
+"""cairn.awsmon — AWS account-configuration integrity monitor. DORMANT SCAFFOLD.
+
+⚠ DORMANT — unit-tested against fake clients (tests/test_awsmon.py) but NOT
+yet validated against a real AWS account. The CLI subcommand and the `aws`
+pyproject extra are unwired until then (uncomment in __main__.py and
+pyproject.toml to re-enable). Import-safe without boto3 — and it must stay
+that way: azmon/gcpmon/k8smon import DEFAULT_VOLATILE_FIELDS and canonicalize
+from this module.
 
 The third cairn subsystem, modeled on winreg_mon: a point-in-time baseline of
 security-relevant account configuration, an offline diff on rescan, and the
