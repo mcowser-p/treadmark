@@ -57,28 +57,33 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--config", "-c")
     pr.add_argument("--json", action="store_true")
 
-    # ----- aws (cloud account configuration drift; needs `cairn[aws]`) -----
+    # ----- aws (SCAFFOLD, dormant — unit-tested, CLI unwired; uncomment to wire) -----
+    # awsmon.py has fake-client unit tests (tests/test_awsmon.py) but has NOT
+    # been validated against a real AWS account, so the subcommand is dormant
+    # for now. To enable: uncomment this block, _run_aws, its dispatch branch
+    # in main(), and the `aws` extra (+ boto3 in `all`) in pyproject.toml.
     # Deliberately NOT part of `all`: a local host and a cloud account are
     # different trust domains with different credentials and cadences.
-    paws = sub.add_parser("aws",
-                          help="AWS account-configuration drift monitor "
-                               "(baseline + scan; requires boto3 via "
-                               "`pip install cairn[aws]`)")
-    paws.add_argument("command", choices=["init", "scan", "update", "verify"])
-    paws.add_argument("--config", "-c")
-    paws.add_argument("--json", action="store_true")
-    paws.add_argument("--profile", metavar="NAME",
-                      help="AWS profile override (else config aws_profile / "
-                           "environment credentials)")
-    paws.add_argument("--region", action="append", default=[], metavar="R",
-                      help="Limit to region R (repeatable; overrides config "
-                           "aws_regions; default = all enabled regions)")
-    paws.add_argument("--report", metavar="PATH",
-                      help="Write the drift report to PATH "
-                           "(json/sarif/md/txt by extension; '-' = stdout)")
-    paws.add_argument("--format", dest="report_format",
-                      choices=["json", "sarif", "md", "txt"],
-                      help="Force report format (else inferred from --report)")
+    #
+    # paws = sub.add_parser("aws",
+    #                       help="AWS account-configuration drift monitor "
+    #                            "(baseline + scan; requires boto3 via "
+    #                            "`pip install cairn[aws]`)")
+    # paws.add_argument("command", choices=["init", "scan", "update", "verify"])
+    # paws.add_argument("--config", "-c")
+    # paws.add_argument("--json", action="store_true")
+    # paws.add_argument("--profile", metavar="NAME",
+    #                   help="AWS profile override (else config aws_profile / "
+    #                        "environment credentials)")
+    # paws.add_argument("--region", action="append", default=[], metavar="R",
+    #                   help="Limit to region R (repeatable; overrides config "
+    #                        "aws_regions; default = all enabled regions)")
+    # paws.add_argument("--report", metavar="PATH",
+    #                   help="Write the drift report to PATH "
+    #                        "(json/sarif/md/txt by extension; '-' = stdout)")
+    # paws.add_argument("--format", dest="report_format",
+    #                   choices=["json", "sarif", "md", "txt"],
+    #                   help="Force report format (else inferred from --report)")
 
     # ----- azure / gcp / k8s (SCAFFOLD — untested; uncomment to wire) -----
     # Modules src/cairn/azmon.py, gcpmon.py, k8smon.py exist and follow the
@@ -198,24 +203,25 @@ def _run_registry(args) -> int:
     return 2
 
 
-def _run_aws(args) -> int:
-    from . import awsmon
-    cfg = files.load_config(args.config)
-    if getattr(args, "profile", None):
-        cfg["aws_profile"] = args.profile
-    if getattr(args, "region", None):
-        cfg["aws_regions"] = args.region
-    if args.command == "init":
-        return awsmon.cmd_init(cfg)
-    if args.command == "scan":
-        return awsmon.cmd_scan(cfg, json_out=args.json,
-                               report_path=args.report,
-                               report_format=args.report_format)
-    if args.command == "update":
-        return awsmon.cmd_scan(cfg, update=True)
-    if args.command == "verify":
-        return awsmon.cmd_scan(cfg, quiet=True)
-    return 2
+# SCAFFOLD — dormant with the aws subparser (see build_parser):
+# def _run_aws(args) -> int:
+#     from . import awsmon
+#     cfg = files.load_config(args.config)
+#     if getattr(args, "profile", None):
+#         cfg["aws_profile"] = args.profile
+#     if getattr(args, "region", None):
+#         cfg["aws_regions"] = args.region
+#     if args.command == "init":
+#         return awsmon.cmd_init(cfg)
+#     if args.command == "scan":
+#         return awsmon.cmd_scan(cfg, json_out=args.json,
+#                                report_path=args.report,
+#                                report_format=args.report_format)
+#     if args.command == "update":
+#         return awsmon.cmd_scan(cfg, update=True)
+#     if args.command == "verify":
+#         return awsmon.cmd_scan(cfg, quiet=True)
+#     return 2
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -234,9 +240,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_files(args)
     if args.subsystem == "registry":
         return _run_registry(args)
-    if args.subsystem == "aws":
-        return _run_aws(args)
-    # SCAFFOLD — uncomment once azmon/gcpmon are validated (see build_parser):
+    # SCAFFOLD — uncomment once awsmon (real-account) / azmon / gcpmon are
+    # validated (see build_parser):
+    # if args.subsystem == "aws":
+    #     return _run_aws(args)
     # if args.subsystem == "azure":
     #     from . import azmon
     #     cfg = files.load_config(args.config)

@@ -1,5 +1,15 @@
 # Cloud configuration drift with cairn
 
+> **⚠ Status: DORMANT.** `cairn aws` shipped in 0.10.0 but is now a dormant
+> scaffold pending validation against a real AWS account — the published
+> product is the OS FIM (files/registry/footprint). The `awsmon` module and
+> its fake-client unit tests remain in the tree and must stay green; the CLI
+> subcommand and the `aws` pyproject extra are commented out (the same
+> treatment as azure/gcp/k8s below). This page describes the behavior once
+> re-wired. To re-enable: uncomment the `aws` subparser, `_run_aws`, and its
+> dispatch branch in `src/cairn/__main__.py`, plus the `aws` extra in
+> `pyproject.toml`.
+
 `cairn aws` applies cairn's forensic model — a point-in-time **baseline**, an
 offline **diff** on rescan, exit codes **0/1/2**, and SARIF/JSON reports — to
 an AWS account's security-relevant configuration. It answers "what changed in
@@ -12,7 +22,7 @@ detect drift, alert. Point it at a hardened account and every deviation — a
 loosened security group, a disabled CloudTrail, a new IAM policy, KMS rotation
 turned off — surfaces on the next scan.
 
-## Install
+## Install (once re-enabled)
 
 ```
 pip install "cairn[aws]"
@@ -115,13 +125,15 @@ summary.
 
 The record model (`AwsRecord`: identity + scope + canonical config + hash) and
 the driver-registry pattern are provider-agnostic. Adding a cloud is a new
-`*mon.py` with its own driver set and native inventory API. Azure, GCP, and
-Kubernetes ship as **dormant, untested scaffolds** — the modules exist and
-follow the awsmon shape, but their CLI subcommands and pyproject extras are
-commented out until each is validated against a real tenant/cluster:
+`*mon.py` with its own driver set and native inventory API. All four providers
+are currently **dormant**: AWS is unit-tested but CLI-unwired pending
+real-account validation; Azure, GCP, and Kubernetes are untested scaffolds.
+Their CLI subcommands and pyproject extras are commented out until each is
+validated against a real account/tenant/cluster:
 
 | Provider | Module | Status | Native inventory / config API | Auth |
 |---|---|---|---|---|
+| AWS | `awsmon` | dormant (unit-tested; CLI unwired) | per-service `Describe*/List*/Get*` (boto3) | profile / env / instance role |
 | Azure | `azmon` | scaffold (untested) | Azure Resource Graph | service principal / managed identity |
 | GCP | `gcpmon` | scaffold (untested) | Cloud Asset Inventory (`cloudasset`) | service account / ADC |
 | Kubernetes | `k8smon` | scaffold (untested) | API server `list` (RBAC, NetworkPolicy, admission, ServiceAccounts, Secret **metadata only**) | kubeconfig / in-cluster SA |

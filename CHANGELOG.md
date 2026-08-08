@@ -4,6 +4,10 @@ All notable changes to cairn are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- `cairn aws` (shipped in 0.10.0) demoted to a **dormant scaffold** pending validation against a real AWS account: the subcommand, its dispatch, and the `aws` extra (plus boto3 in `all`) are commented out. `awsmon.py` and its fake-client unit tests remain in the tree. Re-enable by uncommenting the marked blocks in `src/cairn/__main__.py` and `pyproject.toml` — see `docs/cloud-workflow.md`.
+
 ### Features
 
 - Widened default watch set in `/etc/cairn/cairn.yaml`: now also monitors `/opt`, `/home`, `/root`, `/usr/local/bin`, `/usr/local/sbin`, the vendor systemd tree (`/usr/lib/systemd` — units, generators, sleep/shutdown hooks), and per-user crontabs (`/var/spool/cron`). Home-dir noise (`.cache`, Trash, snap) is excluded, but shell rc files, `~/.ssh`, and shell history stay watched. Note: with `store_content` on, watching `/home`/`/root` can capture dotfiles and SSH keys into the (root-only) baseline DB — treat it as sensitive.
