@@ -20,5 +20,6 @@ invariants). Critical rules:
   paths under `--root` — never persist real paths. Exclude patterns are
   substrings on logical paths, not globs.
 - Windows code stays gated behind `IS_WINDOWS` and importable on Linux;
-  Windows CI is deliberately disabled. Placeholder metadata
-  (`Your Org`/`example.com`) is intentionally pending — don't replace it.
+  Windows CI is deliberately disabled. Org metadata (Apache-2.0, mcowser-p,
+  github.com/mcowser-p/cairn) is set — see SETUP.md for the two permanent
+  values (WiX UpgradeCode, MSI registry path) that must never change.

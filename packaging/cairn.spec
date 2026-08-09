@@ -2,8 +2,8 @@ Name:           cairn
 Version:        %{_version}
 Release:        1%{?dist}
 Summary:        Cross-platform File Integrity Monitor
-License:        MIT
-URL:            https://example.com/cairn
+License:        Apache-2.0
+URL:            https://github.com/mcowser-p/cairn
 BuildArch:      %{_target_arch}
 
 # We pre-build the binary with PyInstaller; nothing for rpmbuild to compile.
@@ -62,5 +62,5 @@ workflow.
 EOF
 
 %changelog
-* %{_changelog_date} ops <ops@example.com> - %{_version}-1
+* %{_changelog_date} mcowser-p <mcowser-p@users.noreply.github.com> - %{_version}-1
 - Release %{_version}.

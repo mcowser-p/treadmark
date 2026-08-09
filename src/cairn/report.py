@@ -356,7 +356,7 @@ def _render_sarif(result: ScanResult) -> str:
             "tool": {
                 "driver": {
                     "name":    "cairn",
-                    "informationUri": "https://example.com/cairn",
+                    "informationUri": "https://github.com/mcowser-p/cairn",
                     "rules":   SARIF_RULES,
                 },
             },
@@ -867,7 +867,7 @@ def _render_aws_sarif(result: AwsScanResult) -> str:
             "tool": {
                 "driver": {
                     "name":    "cairn-aws",
-                    "informationUri": "https://example.com/cairn",
+                    "informationUri": "https://github.com/mcowser-p/cairn",
                     "rules":   AWS_SARIF_RULES,
                 },
             },

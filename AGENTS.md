@@ -117,9 +117,10 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
 
 ## Known-pending work (don't "fix" these in passing)
 
-- Placeholder metadata (`Your Org`, `example.com`, `ops@example.com`) is
-  intentionally unreplaced until the maintainer supplies real values — the
-  list lives in SETUP.md's "Pre-publish TODO".
+- Org metadata is SET (2026-08: Apache-2.0, `mcowser-p`,
+  github.com/mcowser-p/cairn, GitHub-noreply maintainer address). Two values
+  are permanent — do not change: the WiX `UpgradeCode` GUID and the MSI
+  state registry path `Software\mcowser-p\Cairn` (functional, not cosmetic).
 - Windows CI is re-enabled but SOAKING: the release.yml windows jobs are
   `continue-on-error` so a flake can't hold Linux releases hostage. Flip to
   blocking (add them to attach.needs, drop continue-on-error) after a couple

@@ -8,8 +8,8 @@ version = "0.10.0"
 description = "Cross-platform File Integrity Monitor (Linux + Windows)"
 readme = "README.md"
 requires-python = ">=3.9"
-# License intentionally unset for now — see LICENSE (all rights reserved).
-authors = [{ name = "Your Org" }]
+license = "Apache-2.0"
+authors = [{ name = "mcowser-p" }]
 keywords = ["fim", "file-integrity", "security", "aide", "tripwire", "baseline"]
 classifiers = [
     "Operating System :: POSIX :: Linux",
@@ -43,7 +43,9 @@ dev     = ["pytest>=7.4", "PyYAML>=6.0"]
 cairn = "cairn.__main__:main"
 
 [project.urls]
-Homepage = "https://example.com/cairn"
+Homepage = "https://github.com/mcowser-p/cairn"
+Repository = "https://github.com/mcowser-p/cairn"
+Issues = "https://github.com/mcowser-p/cairn/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cairn"]
