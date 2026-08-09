@@ -73,6 +73,8 @@ jobs:
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
+          # consumed by the smoke job in this same run; nothing needs it later
+          retention-days: 1
 
   # Install the freshly built packages on real target distros and run a
   # full baseline cycle. Catches "binary won't load on the target" and
@@ -111,10 +113,12 @@ jobs:
       # each package do. Uploaded even on failure for debugging.
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true   # diagnostics: never fail the build on them
         with:
           name: footprint-${{ matrix.name }}
           path: footprint-*.json
           if-no-files-found: ignore
+          retention-days: 7
       - name: footprint summary
         if: always()
         shell: bash
@@ -170,6 +174,7 @@ jobs:
             dist/cairn-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
+          retention-days: 1
       - name: smoke-test the msi
         shell: pwsh
         run: scripts\smoke-test.ps1
@@ -177,7 +182,9 @@ jobs:
       # also renders them into the job summary). Not a release asset.
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true   # diagnostics: never fail the build on them
         with:
           name: footprint-windows
           path: footprint-windows-*.json
           if-no-files-found: ignore
+          retention-days: 7
