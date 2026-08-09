@@ -93,7 +93,7 @@ Layer diffs also only exist for OCI images. A mounted VM disk, a golden AMI, and
 | cron jobs | `/etc/cron.d/*`, `/etc/crontab`, `/etc/cron.{hourly,daily,weekly,monthly}/*`, `/var/spool/cron/*` | schedule (including `@reboot` and friends), the user field where the format has one, the command |
 | users | `/etc/passwd` diff | name, uid, gid, home, shell, whether it's a system account, whether login is disabled |
 | groups | `/etc/group` diff | new groups, and **membership changes on existing groups** — this is how you catch a service account being added to `docker`, `sudo`, or `shadow` |
-| sudo rules | `/etc/sudoers`, `/etc/sudoers.d/*` | principal (user or `%group`), runas target, `NOPASSWD`, permitted commands |
+| sudo rules | `/etc/sudoers`, `/etc/sudoers.d/*` | principal (user or `%group`), runas target, `NOPASSWD`, permitted commands — **plus** `privilege.sudoers_files[]` carries the *full raw contents* of every added/modified sudoers file (including `Cmnd_Alias` and `Defaults` lines the rule parser skips), so a review sees exactly what each file grants |
 | privileged binaries | mode bits + `security.capability` xattr | setuid, setgid, world-writable-and-executable, file capabilities |
 | PAM | `/etc/pam.d/*`, `/etc/security/*` | which files the install touched (always flagged) |
 | other integration points | polkit, D-Bus system policy, sysctl, udev rules, `ld.so.conf.d`, `profile.d`, `limits.d`, AppArmor, SELinux, tmpfiles, sysusers, modprobe, logrotate, init scripts, nsswitch | recorded with category and added/modified |
@@ -110,7 +110,7 @@ summary{ counts }
 principals{ users_added, groups_added, membership_changes }
 services{ systemd_units, quadlets }
 scheduled{ cron_jobs }
-privilege{ sudo_rules, setuid_binaries, setgid_binaries,
+privilege{ sudo_rules, sudoers_files, setuid_binaries, setgid_binaries,
            file_capabilities, pam_files_touched }
 security_relevant_files[]
 executables[]
