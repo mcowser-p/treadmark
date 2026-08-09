@@ -141,3 +141,7 @@ See [`windows/README.md`](windows/README.md) for the WiX-specific build details.
 - [`docs/golden-baseline-workflow.md`](docs/golden-baseline-workflow.md) — fleet-scale "golden image" comparisons
 - [`windows/README.md`](windows/README.md) — MSI build, signing, customization
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Conventional Commits, automated releases
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).

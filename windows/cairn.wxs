@@ -43,7 +43,7 @@
   -->
   <Package
     Name="Cairn File Integrity Monitor"
-    Manufacturer="Your Org"
+    Manufacturer="mcowser-p"
     Version="$(var.Version)"
     UpgradeCode="589f68fc-59fe-41a1-8ef8-2c2b31bdcc16"
     Scope="perMachine"
@@ -58,7 +58,7 @@
 
     <Icon Id="CairnIcon" SourceFile="cairn.ico" />
     <Property Id="ARPPRODUCTICON" Value="CairnIcon" />
-    <Property Id="ARPHELPLINK" Value="https://example.com/cairn" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/mcowser-p/cairn" />
     <!-- ARPNOMODIFY is owned by the WixUI_InstallDir dialog set; defining it
          here too is a duplicate-symbol error (WIX0091). Let the UI lib set it. -->
 
@@ -108,7 +108,7 @@
           <util:PermissionEx User="SYSTEM"          GenericAll="yes" />
         </CreateFolder>
         <RegistryValue Root="HKLM"
-                       Key="Software\YourOrg\Cairn"
+                       Key="Software\mcowser-p\Cairn"
                        Name="DataDir"
                        Type="string"
                        Value="[DATAFOLDER]"
@@ -126,7 +126,7 @@
                      System="yes"
                      Permanent="no" />
         <RegistryValue Root="HKLM"
-                       Key="Software\YourOrg\Cairn"
+                       Key="Software\mcowser-p\Cairn"
                        Name="PathRegistered"
                        Type="integer"
                        Value="1"

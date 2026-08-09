@@ -173,24 +173,20 @@ cairn files scan --config C:\ProgramData\Cairn\cairn.yaml --report drift.md
 
 If anything's off, file a `fix:` PR; semantic-release will cut the patch automatically when it merges.
 
-## Pre-publish TODO (placeholders still in the tree)
+## Pre-publish TODO — ✅ done (2026-08-08)
 
-These don't block the release *mechanics* — the pipeline runs fine with
-them — but they must be replaced before a release goes public:
+All placeholders are replaced: license is **Apache-2.0** (`LICENSE`,
+`License.rtf`, pyproject `license`, rpm `License:`), org is **mcowser-p**
+(pyproject authors, MSI `Manufacturer`, exe `--company-name`), URLs point at
+**https://github.com/mcowser-p/cairn** (pyproject urls, deb/rpm metadata,
+`ARPHELPLINK`, SARIF `informationUri`), and the maintainer contact is the
+GitHub noreply address (`mcowser-p@users.noreply.github.com` — no real
+mailbox published).
 
-1. `pyproject.toml` — `authors = [{ name = "Your Org" }]` and
-   `Homepage = "https://example.com/cairn"`
-2. `LICENSE` — copyright holder
-3. `scripts/build-deb.sh` — `Maintainer:` and `Homepage:` fields
-4. `packaging/cairn.spec` — `URL:` and the changelog maintainer email
-5. `src/cairn/report.py` — the SARIF `informationUri`
-   (update `test_sarif_report_parses_and_schema_basics` in the same commit
-   if you assert on it)
-6. `windows/cairn.wxs` org strings (`Your Org`, `Software\YourOrg\Cairn`)
-   and `windows/License.rtf` — the MSI installs and is CI-tested, but isn't
-   brand-correct until these are set. (UpgradeCode GUID is already done.)
-   The `Software\YourOrg\Cairn` registry path is functional, not just
-   cosmetic — pick the real path before shipping to avoid a later migration.
+Two things are now **permanent** — never change casually:
+- the WiX `UpgradeCode` GUID (already locked earlier), and
+- the MSI state registry path `Software\mcowser-p\Cairn` (functional:
+  changing it orphans installed-state on upgrade).
 
 ## 8. Day-2 things you'll want eventually
 

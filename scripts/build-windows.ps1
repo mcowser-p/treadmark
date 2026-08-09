@@ -41,7 +41,7 @@ python -m nuitka `
     --include-module=ntsecuritycon `
     --include-module=pywintypes `
     --windows-icon-from-ico=windows\cairn.ico `
-    --company-name="Your Org" `
+    --company-name="mcowser-p" `
     --product-name="cairn" `
     --file-version=$version `
     --product-version=$version `

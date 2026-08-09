@@ -42,8 +42,8 @@ Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: $DEB_ARCH
-Maintainer: ops@example.com
-Homepage: https://example.com/cairn
+Maintainer: mcowser-p <mcowser-p@users.noreply.github.com>
+Homepage: https://github.com/mcowser-p/cairn
 Description: Cross-platform File Integrity Monitor
  A cairn is a stack of stones marking known-good ground. This is the same
  idea for files: build a baseline once, then verify nothing has been
