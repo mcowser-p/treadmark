@@ -1,6 +1,6 @@
 """cairn.accessvars — turn a footprint model into Ansible access vars.
 
-The consumer is the `declarative_access` role (the linux-access repo):
+The consumer is the `declarative_access` role (the ansible-declarative-access repo):
 given the services, timers, quadlets, and folders an install created, the
 role grants a team admin rights scoped to exactly that surface. This module
 derives the role's variables from a footprint model and emits them as a YAML

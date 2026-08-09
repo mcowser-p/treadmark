@@ -219,7 +219,7 @@ sudo cairn footprint --config ... --app myapp \
 cairn access-vars myapp-footprint.json -o myapp-access.yml
 ```
 
-WHO gets the access is deliberately not in the file — the operator passes `-e group_name=...` at apply time. Review the file before applying; it inherits the install-time caveat at the top of this document. The end-to-end workflow, the vars contract, and the security tradeoffs live in the linux-access repo (`docs/declarative-systemd-access.md` there); cairn only emits the vars.
+WHO gets the access is deliberately not in the file — the operator passes `-e group_name=...` at apply time. Review the file before applying; it inherits the install-time caveat at the top of this document. The end-to-end workflow, the vars contract, and the security tradeoffs live in the ansible-declarative-access repo (`docs/declarative-systemd-access.md` there); cairn only emits the vars.
 
 ## Windows
 
