@@ -116,9 +116,30 @@ security_relevant_files[]
 executables[]
 filesystem{ added_by_category, modified, deleted }
 access_hints[]        <- the part the policy agent wants
+group_access[]        <- what each install-created group can already touch
 risks[]               <- the part a human should read first
 scan_errors[]
 ```
+
+### `group_access`
+
+For each group the install **created**, the installed paths that group can
+already write or read through its POSIX group bits:
+
+```json
+{
+  "group": "tomcat", "gid": 53,
+  "writable": ["/var/lib/tomcat/webapps/", "/etc/tomcat/Catalina/"],
+  "readable": ["/etc/tomcat/", "/etc/tomcat/context.xml"]
+}
+```
+
+This answers "if I put a team into this group, what do they get for free?" —
+the least-effort way to grant access. Where a group already has group-write on
+a directory (Tomcat ships `webapps` at `0775 root:tomcat`), a team joins that
+group via pam_group and needs **no ACL and no ownership change** — zero
+deviation from the vendor's permissions. Where no such group exists, the access
+model falls back to an ACL or a setgid group-owned directory.
 
 ### `access_hints`
 
