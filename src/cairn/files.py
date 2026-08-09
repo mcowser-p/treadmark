@@ -327,13 +327,20 @@ def to_logical(path: str, root_prefix: str) -> str:
 
     /mnt/image/etc/passwd with root_prefix=/mnt/image  ->  /etc/passwd
     Live-host scans (root_prefix="") pass through unchanged.
+
+    The remainder is normalized to forward slashes: a logical path describes
+    the target root, not the machine doing the scanning, so a rootfs
+    extracted on Windows must yield /data/app.conf — the same string a Linux
+    host would store — or baselines stop being portable and exclude patterns
+    stop matching. Normalizing via os.sep is deliberate: on POSIX a backslash
+    is a legal filename character and must survive untouched.
     """
     if not root_prefix:
         return path
     if path == root_prefix:
         return "/"
     if path.startswith(root_prefix + os.sep) or path.startswith(root_prefix + "/"):
-        return path[len(root_prefix):]
+        return path[len(root_prefix):].replace(os.sep, "/")
     return path
 
 
