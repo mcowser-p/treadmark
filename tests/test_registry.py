@@ -96,6 +96,8 @@ def test_registry_detects_added_and_modified(reg_config, capsys):
         winreg.SetValueEx(key, "Existing", 0, winreg.REG_SZ, "orig")
         cfg = reg_config("drift")
         assert winreg_mon.cmd_init(cfg) == 0
+        # drop init's progress output; only scan's stdout is the JSON contract
+        capsys.readouterr()
 
         # add a value + modify the existing one → drift
         winreg.SetValueEx(key, "Planted", 0, winreg.REG_SZ, "payload")
