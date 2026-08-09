@@ -115,6 +115,18 @@ def test_quadlet_access_hint(footprint_model):
     assert needs["/etc/myapp/web.env"]["access"] == "read"   # EnvironmentFile=
 
 
+def test_sudoers_files_captured_with_contents(footprint_model):
+    model, _root = footprint_model
+    sfiles = {s["path"]: s for s in model["privilege"]["sudoers_files"]}
+    assert "/etc/sudoers.d/myapp" in sfiles
+    entry = sfiles["/etc/sudoers.d/myapp"]
+    assert entry["change"] == "added"
+    # the FULL raw file is captured — including the Cmnd_Alias line that the
+    # rule parser skips — so a reviewer sees exactly what the file grants
+    assert "Cmnd_Alias MYAPP_CTL" in entry["content"]
+    assert "%myapp-admins ALL=(root) NOPASSWD: MYAPP_CTL" in entry["content"]
+
+
 def test_cron_job_parsed_with_user_field(footprint_model):
     model, _root = footprint_model
     job = model["scheduled"]["cron_jobs"][0]

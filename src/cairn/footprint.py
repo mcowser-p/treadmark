@@ -105,6 +105,7 @@ def _extract(added: list, modified: list) -> dict:
     quadlets: list[sem.QuadletUnit] = []
     cron_jobs: list[sem.CronJob] = []
     sudo_rules: list[sem.SudoRule] = []
+    sudoers_files: list[dict] = []    # raw contents of each added/modified sudoers file
     users_added: list[sem.UserEntry] = []
     groups_added: list[sem.GroupEntry] = []
     membership_changes: list[sem.GroupMembershipChange] = []
@@ -134,6 +135,8 @@ def _extract(added: list, modified: list) -> dict:
                 schedule=f"@{period}", run_as="root", command=rec.path))
         elif cat == "sudoers" and content:
             sudo_rules.extend(sem.parse_sudoers(rec.path, content))
+            sudoers_files.append({"path": rec.path, "change": "added",
+                                  "content": content})
         elif cat == "pam":
             pam_files.append(rec.path)
         elif cat == "group" and content:
@@ -162,6 +165,8 @@ def _extract(added: list, modified: list) -> dict:
             membership_changes.extend(m)
         elif cat == "sudoers" and new_content:
             sudo_rules.extend(sem.parse_sudoers(new.path, new_content))
+            sudoers_files.append({"path": new.path, "change": "modified",
+                                  "content": new_content})
         elif cat in ("systemd_unit", "systemd_dropin") and new_content:
             systemd_units.append(sem.parse_systemd_unit(new.path, new_content))
         elif cat == "quadlet" and new_content:
@@ -184,6 +189,7 @@ def _extract(added: list, modified: list) -> dict:
         "quadlets": quadlets,
         "cron_jobs": cron_jobs,
         "sudo_rules": sudo_rules,
+        "sudoers_files": sudoers_files,
         "users_added": users_added,
         "groups_added": groups_added,
         "membership_changes": membership_changes,
@@ -628,6 +634,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
         },
         "privilege": {
             "sudo_rules":       [asdict(r) for r in extracted["sudo_rules"]],
+            "sudoers_files":    extracted["sudoers_files"],
             "setuid_binaries":  [asdict(e) for e in executables if e.setuid],
             "setgid_binaries":  [asdict(e) for e in executables if e.setgid],
             "file_capabilities":[asdict(e) for e in executables if e.file_capabilities],

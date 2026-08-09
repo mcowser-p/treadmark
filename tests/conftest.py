@@ -162,10 +162,17 @@ Image=registry.example.com/myapp/sidecar:1.0
 
 CRON_D_ENTRY = "*/5 * * * * myapp /usr/bin/myapp-helper --tick\n"
 
+SUDOERS_D_ENTRY = (
+    "# Managed by the app installer\n"
+    "Cmnd_Alias MYAPP_CTL = /bin/systemctl restart myapp, /bin/systemctl status myapp\n"
+    "%myapp-admins ALL=(root) NOPASSWD: MYAPP_CTL\n"
+)
+
 ROOTFS_DIRS = [
     "etc/systemd/system",
     "etc/containers/systemd",
     "etc/cron.d",
+    "etc/sudoers.d",
     "home",
     "usr/bin",
     "usr/lib",
@@ -205,6 +212,7 @@ def install_app(root: Path, *, setuid: bool = True) -> None:
     (root / "etc/systemd/system/myapp-maintenance.timer").write_text(
         TIMER_MAINTENANCE, encoding="utf-8")
     (root / "etc/cron.d/myapp").write_text(CRON_D_ENTRY, encoding="utf-8")
+    (root / "etc/sudoers.d/myapp").write_text(SUDOERS_D_ENTRY, encoding="utf-8")
 
     # Quadlets: one rootful (podman generates myapp-web.service from it) and
     # one rootless under dev1's home (owner derived from the path).
