@@ -144,6 +144,10 @@ jobs:
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
+          # Consumed by smoke + attach within THIS run; the durable copies
+          # are the release assets. 90-day default retention exhausted the
+          # account's Actions storage quota and blocked uploads repo-wide.
+          retention-days: 1
 
   # =========================================================================
   # 2b. Build the Windows exe + MSI at the computed version, then smoke-test
@@ -191,6 +195,7 @@ jobs:
             dist/cairn-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
+          retention-days: 1
       - name: smoke-test the msi
         shell: pwsh
         env:
@@ -208,6 +213,7 @@ jobs:
           name: footprint-windows
           path: footprint-windows-*.json
           if-no-files-found: ignore
+          retention-days: 7
 
   # =========================================================================
   # 2b½. Windows 11 (arm64) footprint captures — SOAK: first use of the
@@ -251,6 +257,7 @@ jobs:
           name: footprint-windows-11
           path: footprint-windows11-*.json
           if-no-files-found: ignore
+          retention-days: 7
 
   # =========================================================================
   # 2c. Smoke-test the freshly built Linux packages on real target distros,
@@ -299,6 +306,7 @@ jobs:
           name: footprint-${{ matrix.name }}-${{ matrix.arch }}
           path: footprint-*.json
           if-no-files-found: ignore
+          retention-days: 7
       # Render the captured footprints into the job summary (counts per app).
       - name: footprint summary
         if: always()

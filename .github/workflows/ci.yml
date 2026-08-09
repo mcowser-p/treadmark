@@ -73,6 +73,10 @@ jobs:
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
+          # Only consumed by the smoke job minutes later. Keeping ~150MB of
+          # build intermediates for the default 90 days exhausted the
+          # account's Actions storage quota and blocked uploads repo-wide.
+          retention-days: 3
 
   # Install the freshly built packages on real target distros and run a
   # full baseline cycle. Catches "binary won't load on the target" and
@@ -115,6 +119,7 @@ jobs:
           name: footprint-${{ matrix.name }}
           path: footprint-*.json
           if-no-files-found: ignore
+          retention-days: 7
       - name: footprint summary
         if: always()
         shell: bash
@@ -170,6 +175,7 @@ jobs:
             dist/cairn-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
+          retention-days: 3
       - name: smoke-test the msi
         shell: pwsh
         run: scripts\smoke-test.ps1
@@ -181,3 +187,4 @@ jobs:
           name: footprint-windows
           path: footprint-windows-*.json
           if-no-files-found: ignore
+          retention-days: 7
