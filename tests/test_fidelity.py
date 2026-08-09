@@ -19,8 +19,11 @@ from conftest import install_app
 pytestmark = pytest.mark.skipif(sys.platform == "win32",
                                 reason="fidelity heuristics are POSIX-only")
 
+# hasattr guard: this line runs at COLLECTION time on every platform — the
+# module-level win32 pytestmark above skips the tests but not the import,
+# and os.getuid does not exist on Windows.
 requires_nonroot = pytest.mark.skipif(
-    os.getuid() == 0,
+    hasattr(os, "getuid") and os.getuid() == 0,
     reason="degraded detection requires a non-root owner uid")
 
 
