@@ -139,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Write the model to PATH as JSON. Use '-' or omit for stdout.")
     pfp.add_argument("--access-vars", metavar="PATH", dest="access_vars",
                      help="Also write an Ansible vars YAML for the "
-                          "mcowser_p.declarative_access role: bare service/timer names, "
+                          "declarative_access role: bare service/timer names, "
                           "quadlet-generated units, unit files for write ACLs, and "
                           "the config/state/log folders the install created. "
                           "Review before applying; pass the team via "
@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ----- access-vars (footprint JSON → Ansible vars for declarative_access) -----
     pav = sub.add_parser("access-vars",
                          help="Convert an existing footprint JSON into an Ansible "
-                              "vars file for the mcowser_p.declarative_access role "
+                              "vars file for the declarative_access role "
                               "(same output as `footprint --access-vars`)")
     pav.add_argument("footprint_json",
                      help="Footprint JSON produced by `cairn footprint --report`")

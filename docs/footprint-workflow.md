@@ -210,7 +210,7 @@ The output format for a full report is the Windows section map in the runbooks r
 
 ## Exporting Ansible access vars
 
-`--access-vars PATH` (or the standalone `cairn access-vars footprint.json -o PATH`) turns a Linux footprint into a ready-to-review Ansible vars file for the `mcowser_p.declarative_access` role: bare service/timer names for scoped sudoers grants, quadlet-generated unit names, the installed unit/quadlet files (write ACLs), the config/state/log folders the install created, ownership entries for paths owned by install-created accounts, and `loginctl` linger users for rootless quadlets.
+`--access-vars PATH` (or the standalone `cairn access-vars footprint.json -o PATH`) turns a Linux footprint into a ready-to-review Ansible vars file for the `declarative_access` role: bare service/timer names for scoped sudoers grants, quadlet-generated unit names, the installed unit/quadlet files (write ACLs), the config/state/log folders the install created, ownership entries for paths owned by install-created accounts, and `loginctl` linger users for rootless quadlets.
 
 ```sh
 sudo cairn footprint --config ... --app myapp \
