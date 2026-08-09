@@ -25,6 +25,7 @@ import json
 import os
 import platform
 import re
+import stat
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -497,6 +498,49 @@ def _load_container_meta(root_prefix: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Group-access review: what can each install-created group already touch?
+# ---------------------------------------------------------------------------
+
+def _derive_group_access(added: list, modified: list,
+                         groups_added: list) -> list[dict]:
+    """For each group the install CREATED, list the installed paths that group
+    can already write or read via its POSIX group permission bits.
+
+    This is the key input for deciding *how* to grant a team access: if an
+    install-created group already has group-write on a directory (e.g. Tomcat's
+    /var/lib/tomcat/webapps at 0775 root:tomcat), then simply adding the team to
+    that group via pam_group grants the access — no ACL and no ownership change
+    (and therefore no deviation from the vendor's shipped permissions). Where no
+    such group exists, the access model has to fall back to an ACL or setgid.
+    """
+    wanted = {g.name: {"group": g.name, "gid": g.gid,
+                       "writable": set(), "readable": set()}
+              for g in groups_added}
+    if not wanted:
+        return []
+    all_recs = list(added) + [n for (_o, n, _c) in modified]
+    for rec in all_recs:
+        entry = wanted.get(rec.group)
+        if entry is None:
+            continue
+        mode = rec.mode
+        tag = f"{rec.path}{'/' if rec.is_dir else ''}"
+        if mode & stat.S_IWGRP and mode & stat.S_IXGRP:
+            # group can create/traverse — the useful "can write in here" case
+            entry["writable"].add(tag)
+        elif mode & stat.S_IRGRP:
+            entry["readable"].add(tag)
+    out = []
+    for g in groups_added:
+        e = wanted[g.name]
+        if e["writable"] or e["readable"]:
+            out.append({"group": e["group"], "gid": e["gid"],
+                        "writable": sorted(e["writable"]),
+                        "readable": sorted(e["readable"])})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Model assembly
 # ---------------------------------------------------------------------------
 
@@ -522,6 +566,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
                      for r in deleted]
 
     hints = _derive_access_hints(extracted, added, modified)
+    group_access = _derive_group_access(added, modified, extracted["groups_added"])
     risks = _flag_risks(extracted, executables)
 
     # Baseline provenance for chain-of-custody
@@ -596,6 +641,7 @@ def build_model(cfg: dict, app_name: Optional[str] = None) -> dict:
             "deleted": deleted_paths,
         },
         "access_hints": hints,
+        "group_access": group_access,
         "risks": risks,
         "scan_errors": errors,
     }
