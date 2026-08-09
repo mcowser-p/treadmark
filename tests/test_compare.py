@@ -75,7 +75,9 @@ def test_compare_against_golden(run_cli, make_config, tmp_path):
     rc, out, _err = run_cli("compare", "against", cfg_a["db_path"],
                             "-c", cfg_b_path)
     assert rc == 1
-    assert "/data/app.conf" in out
+    # compare prints host-native separators (\data\app.conf on Windows);
+    # normalize so the assertion is platform-agnostic.
+    assert "/data/app.conf" in out.replace("\\", "/")
 
     # An identical tree compares clean.
     tree_c = _build_tree(tmp_path / "clean-host", marker="same")
