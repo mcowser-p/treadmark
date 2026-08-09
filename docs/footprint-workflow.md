@@ -139,7 +139,10 @@ the least-effort way to grant access. Where a group already has group-write on
 a directory (Tomcat ships `webapps` at `0775 root:tomcat`), a team joins that
 group via pam_group and needs **no ACL and no ownership change** — zero
 deviation from the vendor's permissions. Where no such group exists, the access
-model falls back to an ACL or a setgid group-owned directory.
+model falls back to an ACL or a setgid group-owned directory. The
+`--access-vars` exporter uses this automatically: a granted directory that an
+install-created group already writes is routed through `local_groups`
+(pam_group) instead of an ACL.
 
 ### `access_hints`
 
