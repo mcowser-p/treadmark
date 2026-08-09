@@ -77,6 +77,8 @@ EXPECTED_CONTRACT = {
     "declarative_access_services": ["myapp", "myapp-agent", "myapp-maintenance"],
     "declarative_access_timers": ["myapp-maintenance"],
     "declarative_access_quadlets": ["myapp-web"],
+    "declarative_access_pam_group": True,
+    "declarative_access_local_groups": ["myapp"],
     "declarative_access_linger": True,
     "declarative_access_linger_users": ["dev1"],
     "declarative_access_files_modify": [
@@ -216,6 +218,63 @@ def _entry(path, *, is_dir=False, owner="root", group="root",
     return {"path": path, "is_dir": is_dir, "owner": owner, "group": group,
             "mode_octal": mode_octal, "category": "", "mode_symbolic": "",
             "size": 0, "sha256": None}
+
+
+def test_pam_group_from_install_created_service_group():
+    model = _mk_model()
+    model["services"]["systemd_units"] = [_svc("web.service", group="web")]
+    model["principals"]["groups_added"] = [{"name": "web"}]
+    data = accessvars.derive_access_vars(model)
+    assert data["declarative_access_pam_group"] is True
+    assert data["declarative_access_local_groups"] == ["web"]
+
+
+def test_no_pam_group_when_service_group_not_install_created():
+    # e.g. a service running as a pre-existing group (nobody), or root — not a
+    # group the install created, so no pam_group (config-scoped by default).
+    model = _mk_model()
+    model["services"]["systemd_units"] = [_svc("web.service", group="nobody")]
+    model["principals"]["groups_added"] = []
+    data = accessvars.derive_access_vars(model)
+    assert "declarative_access_pam_group" not in data
+    assert "declarative_access_local_groups" not in data
+
+
+def test_no_pam_group_when_no_service_group():
+    model = _mk_model()
+    model["services"]["systemd_units"] = [_svc("web.service")]  # no Group=
+    data = accessvars.derive_access_vars(model)
+    assert "declarative_access_pam_group" not in data
+
+
+def test_group_writable_dir_uses_pam_group_not_acl():
+    # An install-created group already group-writable on a dir → the exporter
+    # drops the ACL and routes the dir through pam_group (like Tomcat webapps).
+    model = _mk_model()
+    model["filesystem"]["added_by_category"] = {
+        "state_dir": [_entry("/var/lib/app/deploy", is_dir=True,
+                             owner="root", group="app")],
+    }
+    model["group_access"] = [
+        {"group": "app", "gid": 800,
+         "writable": ["/var/lib/app/deploy/"], "readable": []},
+    ]
+    data = accessvars.derive_access_vars(model)
+    assert "/var/lib/app/deploy" not in data.get("declarative_access_folders_modify", [])
+    assert data["declarative_access_pam_group"] is True
+    assert "app" in data["declarative_access_local_groups"]
+
+
+def test_non_group_writable_dir_still_uses_acl():
+    # No install-group covers the dir → it stays an ACL (folders_modify).
+    model = _mk_model()
+    model["filesystem"]["added_by_category"] = {
+        "config": [_entry("/etc/app", is_dir=True, owner="root", group="root")],
+    }
+    model["group_access"] = []
+    data = accessvars.derive_access_vars(model)
+    assert data["declarative_access_folders_modify"] == ["/etc/app"]
+    assert "declarative_access_pam_group" not in data
 
 
 def test_ownership_emitted_for_install_added_principal():

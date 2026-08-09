@@ -43,6 +43,8 @@ _KEY_ORDER = (
     "declarative_access_services",
     "declarative_access_timers",
     "declarative_access_quadlets",
+    "declarative_access_pam_group",
+    "declarative_access_local_groups",
     "declarative_access_linger",
     "declarative_access_linger_users",
     "declarative_access_files_modify",
@@ -133,6 +135,18 @@ def derive_access_vars(model: dict) -> dict:
         if svc.endswith(".service"):
             quadlets.add(svc[: -len(".service")])
 
+    # --- pam_group: the install-created service group(s) a team can join for a
+    # read/traverse baseline (via the role's pam_group feature). Derived from
+    # service units' Group= that the install actually created. Reviewers keep it
+    # for group-friendly apps (web servers, paired with setgid content dirs) and
+    # drop it for databases, whose service group owns raw data (config-scoped).
+    added_group_names = {g.get("name") for g in principals.get("groups_added") or []}
+    local_groups: set[str] = set()
+    for u in services_units:
+        grp = u.get("group")
+        if grp and grp in added_group_names:
+            local_groups.add(grp)
+
     # --- folders ---
     folder_modify: set[str] = set()
     folder_read: set[str] = set()
@@ -155,7 +169,23 @@ def derive_access_vars(model: dict) -> dict:
         for d in u.get("logs_directory") or []:
             folder_read.add("/var/log/" + d)
 
-    folders_modify = _fold_dirs(sorted(folder_modify))
+    # Where an install-created group already has group-write on a directory, the
+    # team gets write for free just by joining that group (pam_group) — no ACL,
+    # no ownership change, no deviation from vendor permissions. Prefer that:
+    # drop such dirs from the ACL list and route them through local_groups.
+    group_writable: dict[str, str] = {}   # dir path -> covering group
+    for ga in model.get("group_access") or []:
+        for p in ga.get("writable") or []:
+            group_writable.setdefault(p.rstrip("/"), ga.get("group"))
+
+    folders_modify_all = _fold_dirs(sorted(folder_modify))
+    folders_modify = []
+    for d in folders_modify_all:
+        grp = group_writable.get(d)
+        if grp:
+            local_groups.add(grp)   # pam_group covers this dir; no ACL needed
+        else:
+            folders_modify.append(d)
     folders_read = [p for p in _fold_dirs(sorted(folder_read))
                     if not _under_any(p, folders_modify)]
 
@@ -209,6 +239,9 @@ def derive_access_vars(model: dict) -> dict:
         out["declarative_access_timers"] = sorted(timers)
     if quadlets:
         out["declarative_access_quadlets"] = sorted(quadlets)
+    if local_groups:
+        out["declarative_access_pam_group"] = True
+        out["declarative_access_local_groups"] = sorted(local_groups)
     if linger_users:
         out["declarative_access_linger"] = True
         out["declarative_access_linger_users"] = sorted(linger_users)
