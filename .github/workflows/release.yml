@@ -41,7 +41,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -63,7 +63,7 @@ jobs:
       tag:      ${{ steps.compute.outputs.tag }}
       pyver:    ${{ steps.compute.outputs.pyver }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0     # full history for commit analysis
       - uses: actions/setup-python@v5
@@ -123,7 +123,7 @@ jobs:
           # python); EL9's default python3 is 3.9.
           ln -sf /usr/bin/python3.12 /usr/local/bin/python3
           ln -sf /usr/bin/python3.12 /usr/local/bin/python
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No tag exists yet — stamp the computed version into the working tree
       # so the .deb/.rpm metadata and `treadmark --version` report it.
@@ -168,7 +168,7 @@ jobs:
     if: needs.version.outputs.released == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -235,7 +235,7 @@ jobs:
     continue-on-error: true   # SOAK — see note above
     runs-on: windows-11-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -291,7 +291,7 @@ jobs:
       - name: prepare amazonlinux container
         if: matrix.image == 'amazonlinux:2023'
         run: dnf install -qy tar gzip
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
@@ -349,7 +349,7 @@ jobs:
       released: ${{ steps.semrel.outputs.released }}
       tag:      ${{ steps.semrel.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -432,7 +432,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.tag }}
 
