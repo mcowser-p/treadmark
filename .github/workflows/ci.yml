@@ -66,7 +66,7 @@ jobs:
           key: nuitka-el9-x86_64
       - run: bash scripts/build-linux.sh
       - run: ls -lh dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-x86_64
           path: |
@@ -111,7 +111,7 @@ jobs:
             bash scripts/smoke-test.sh
       # The captured install footprints (nginx + apache) — what treadmark saw
       # each package do. Uploaded even on failure for debugging.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true   # diagnostics: never fail the build on them
         with:
@@ -167,7 +167,7 @@ jobs:
           key: nuitka-windows-x86_64
       - shell: pwsh
         run: scripts\build-windows.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-windows
           path: |
@@ -180,7 +180,7 @@ jobs:
         run: scripts\smoke-test.ps1
       # Windows footprint models as a workflow artifact (the smoke script
       # also renders them into the job summary). Not a release asset.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true   # diagnostics: never fail the build on them
         with:
