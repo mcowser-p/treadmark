@@ -142,7 +142,7 @@ jobs:
       - name: build binary + deb + rpm
         run: bash scripts/build-linux.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           retention-days: 1
@@ -191,7 +191,7 @@ jobs:
       - name: build binary + msi
         shell: pwsh
         run: scripts\build-windows.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x86_64
           retention-days: 1
@@ -210,7 +210,7 @@ jobs:
       # Windows footprint models (IIS, and Datadog if winget worked) as a
       # WORKFLOW artifact + rendered into the job summary by the smoke script.
       # Named footprint-* so the release attach step excludes them.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: footprint-windows
@@ -254,7 +254,7 @@ jobs:
       - name: desktop app footprints
         shell: pwsh
         run: scripts\win11-footprint.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: footprint-windows-11
@@ -303,7 +303,7 @@ jobs:
             bash scripts/smoke-test.sh
       # The captured install footprints (nginx + apache) — what treadmark saw
       # each package do. Uploaded even on failure for debugging.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: footprint-${{ matrix.name }}-${{ matrix.arch }}
