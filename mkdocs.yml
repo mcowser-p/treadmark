@@ -1,0 +1,34 @@
+---
+site_name: treadmark
+site_url: https://treadmark.readthedocs.io/
+site_description: >-
+  Cross-platform file integrity monitor and install-footprint capture —
+  exports Ansible access-vars profiles for declarative access management.
+repo_url: https://github.com/mcowser-p/treadmark
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/brightness-7, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/brightness-4, name: Light mode}
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Footprint workflow: footprint-workflow.md
+  - Golden baseline workflow: golden-baseline-workflow.md
+  - Forensic workflow: forensic-workflow.md
+  - Cloud workflow: cloud-workflow.md
+  - AWS smoke testing: aws-smoke.md
+  - Output formats: output-formats.md

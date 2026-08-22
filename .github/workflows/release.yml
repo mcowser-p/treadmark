@@ -403,3 +403,33 @@ jobs:
           tag_name: ${{ needs.release.outputs.tag }}
           files: release/*
           fail_on_unmatched_files: true
+
+  # =========================================================================
+  # 5. Publish sdist + wheel to PyPI via Trusted Publishing (OIDC — no
+  #    token secret; the pending publisher on pypi.org authorizes this
+  #    repo + workflow). Binaries (.deb/.rpm/.msi) remain the primary
+  #    channel; this adds `pip install treadmark`.
+  # =========================================================================
+  pypi:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
