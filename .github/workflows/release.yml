@@ -139,6 +139,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
+          retention-days: 1
           path: |
             dist/treadmark-linux-${{ matrix.arch }}
             dist/*.deb
@@ -187,6 +188,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64
+          retention-days: 1
           path: |
             dist/treadmark-windows-x86_64.exe
             dist/*.msi
@@ -206,6 +208,7 @@ jobs:
         if: always()
         with:
           name: footprint-windows
+          retention-days: 1
           path: footprint-windows-*.json
           if-no-files-found: ignore
 
@@ -249,6 +252,7 @@ jobs:
         if: always()
         with:
           name: footprint-windows-11
+          retention-days: 1
           path: footprint-windows11-*.json
           if-no-files-found: ignore
 
@@ -297,6 +301,7 @@ jobs:
         if: always()
         with:
           name: footprint-${{ matrix.name }}-${{ matrix.arch }}
+          retention-days: 1
           path: footprint-*.json
           if-no-files-found: ignore
       # Render the captured footprints into the job summary (counts per app).
