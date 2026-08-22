@@ -31,7 +31,7 @@ jobs:
           - os: windows-latest
             python-version: '3.12'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -58,7 +58,7 @@ jobs:
               gcc make dpkg rpm-build binutils file git-core
           # Build scripts call plain python3; EL9's default is 3.9.
           ln -sf /usr/bin/python3.12 /usr/local/bin/python3
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: cache nuitka
         uses: actions/cache@v4
         with:
@@ -101,7 +101,7 @@ jobs:
       - name: prepare amazonlinux container
         if: matrix.image == 'amazonlinux:2023'
         run: dnf install -qy tar gzip
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64
@@ -148,7 +148,7 @@ jobs:
     needs: test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
