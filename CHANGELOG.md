@@ -2,7 +2,28 @@
 
 All notable changes to cairn are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After the initial release, entries below this line are appended automatically by `python-semantic-release` from conventional commit messages — don't edit them by hand.
 
-## [Unreleased]
+## v0.11.0 (2026-08-22)
+
+### ⚠ Breaking
+
+- **cairn is now treadmark.** The command is `treadmark`, the package is
+  `treadmark`, and the config file is `treadmark-footprint-linux.yaml`.
+  `cairn` invocations and `cairn-*.yaml` configs no longer work.
+
+### Features
+
+- **PyPI**: `pip install treadmark` — sdist and wheel are published on every
+  release via PyPI Trusted Publishing (binaries remain the primary channel).
+- **Docs**: mkdocs site with a ReadTheDocs config (`treadmark.readthedocs.io`).
+- `footprint`: capture raw sudoers file contents in the privilege section.
+- `footprint --access-vars`: derive pam_group local groups, and model
+  per-group writable/readable paths for install-created groups.
+
+### Bug fixes
+
+- `access-vars` output now suggests the `<hostname>-app_restricted` group
+  convention (the retired `rg.<host>` dot notation is gone).
+- `files`: store logical paths with forward slashes on Windows.
 
 ### Changed
 

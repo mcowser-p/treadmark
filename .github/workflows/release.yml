@@ -61,6 +61,7 @@ jobs:
       released: ${{ steps.compute.outputs.released }}
       version:  ${{ steps.compute.outputs.version }}
       tag:      ${{ steps.compute.outputs.tag }}
+      pyver:    ${{ steps.compute.outputs.pyver }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,6 +86,11 @@ jobs:
             echo "released=false"  >> "$GITHUB_OUTPUT"
             echo "No release warranted — downstream jobs will skip."
           fi
+          # The version already stamped in pyproject. A release only fires
+          # when this matches the computed next version — i.e. the release
+          # PR that stamps it has been merged (main is PR-protected).
+          pyver=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "pyver=$pyver" >> "$GITHUB_OUTPUT"
 
   # =========================================================================
   # 2a. Build Linux artifacts at the computed version (both architectures).
@@ -334,7 +340,10 @@ jobs:
   # =========================================================================
   release:
     needs: [version, linux, windows, smoke]
-    if: needs.version.outputs.released == 'true'
+    # Releases are PR-gated: main's ruleset forbids direct pushes, so the
+    # version bump + changelog land via a release PR. Only once that PR is
+    # merged (pyproject stamp == computed next version) does this job tag.
+    if: needs.version.outputs.released == 'true' && needs.version.outputs.version == needs.version.outputs.pyver
     runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.semrel.outputs.released }}
@@ -350,6 +359,11 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v10
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # main is PR-protected: never commit/push the bump from CI. The
+          # release PR already stamped the version; this only creates the
+          # tag and the GitHub release (tags are outside the branch ruleset).
+          commit: "false"
+          changelog: "false"
 
       - name: Summarize
         run: |
