@@ -109,7 +109,7 @@ jobs:
       - run: |
           DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" \
             bash scripts/smoke-test.sh
-      # The captured install footprints (nginx + apache) — what cairn saw
+      # The captured install footprints (nginx + apache) — what treadmark saw
       # each package do. Uploaded even on failure for debugging.
       - uses: actions/upload-artifact@v4
         if: always()
@@ -171,7 +171,7 @@ jobs:
         with:
           name: dist-windows
           path: |
-            dist/cairn-windows-x86_64.exe
+            dist/treadmark-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
           retention-days: 1

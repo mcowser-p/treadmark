@@ -7,38 +7,38 @@ set -e
 # Create the data directory if absent. 0700 so only root can read the
 # baseline DB — the baseline now optionally contains file contents
 # (for diff display), so it's effectively a snapshot of monitored config.
-if [ ! -d /var/lib/cairn ]; then
-    mkdir -p /var/lib/cairn
-    chmod 700 /var/lib/cairn
+if [ ! -d /var/lib/treadmark ]; then
+    mkdir -p /var/lib/treadmark
+    chmod 700 /var/lib/treadmark
 fi
 
-if [ -d /etc/cairn ]; then
-    chmod 755 /etc/cairn
-    [ -f /etc/cairn/cairn.yaml ] && chmod 644 /etc/cairn/cairn.yaml
+if [ -d /etc/treadmark ]; then
+    chmod 755 /etc/treadmark
+    [ -f /etc/treadmark/treadmark.yaml ] && chmod 644 /etc/treadmark/treadmark.yaml
 fi
 
 cat <<'EOF'
 
-cairn installed.
+treadmark installed.
 
-cairn is a forensic tool: capture a known-good baseline now, then run a
+treadmark is a forensic tool: capture a known-good baseline now, then run a
 scan after-the-fact to see what changed. It does NOT run on a schedule.
 
 Folder layout:
-  /usr/bin/cairn          - the binary
-  /etc/cairn/cairn.yaml   - default config (edit before first run)
-  /var/lib/cairn/         - baseline DB lives here (root-only, mode 0700)
+  /usr/bin/treadmark          - the binary
+  /etc/treadmark/treadmark.yaml   - default config (edit before first run)
+  /var/lib/treadmark/         - baseline DB lives here (root-only, mode 0700)
 
 Typical workflow:
-  1. Edit /etc/cairn/cairn.yaml to choose what to monitor.
+  1. Edit /etc/treadmark/treadmark.yaml to choose what to monitor.
   2. On a known-good system, capture the baseline:
-       cairn files init --config /etc/cairn/cairn.yaml
+       treadmark files init --config /etc/treadmark/treadmark.yaml
   3. Inspect the baseline's provenance for evidence purposes:
-       cairn baseline info --config /etc/cairn/cairn.yaml
+       treadmark baseline info --config /etc/treadmark/treadmark.yaml
   4. Later, when investigating: run a scan to see what changed:
-       cairn files scan --config /etc/cairn/cairn.yaml --report drift.md
+       treadmark files scan --config /etc/treadmark/treadmark.yaml --report drift.md
 
-See /usr/share/doc/cairn/forensic-workflow.md for the full investigation
+See /usr/share/doc/treadmark/forensic-workflow.md for the full investigation
 workflow.
 
 EOF

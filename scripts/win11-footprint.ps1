@@ -1,8 +1,8 @@
 ﻿# scripts/win11-footprint.ps1
 #
 # Windows 11 (arm64 runner) footprint captures: install the common-desktop
-# app set via winget and capture what each did. cairn runs from the
-# pip-installed package (`python -m cairn`) — a capture needs no MSI; the
+# app set via winget and capture what each did. treadmark runs from the
+# pip-installed package (`python -m treadmark`) — a capture needs no MSI; the
 # exe/MSI pipeline stays x64 (windows-latest) for now.
 #
 # The set deliberately spans the three Windows privilege shapes:
@@ -29,7 +29,7 @@ Write-Host "    $(cmd /c ver)"
 # Pin the interpreter PATH ONCE. Installing apps mid-run can change what
 # bare `python` resolves to (seen live: after the winget Python install,
 # `python` re-resolved to a different hostedtoolcache interpreter without
-# cairn installed). Every cairn call below uses this pinned path.
+# treadmark installed). Every treadmark call below uses this pinned path.
 $Py = (Get-Command python).Source
 Write-Host "    python: $Py"
 & $Py --version
@@ -67,7 +67,7 @@ if (-not $Winget) {
 if (-not $Winget) { throw "winget unavailable after bootstrap" }
 Write-Host "    winget: $Winget ($(& $Winget --version))"
 
-$settle = if ($env:CAIRN_SETTLE_SECONDS) { [int]$env:CAIRN_SETTLE_SECONDS } else { 20 }
+$settle = if ($env:TREADMARK_SETTLE_SECONDS) { [int]$env:TREADMARK_SETTLE_SECONDS } else { 20 }
 
 # Per-app watch paths: scoped tight so baselines stay fast. Every app also
 # watches System32\Tasks (updater tasks) + the Services registry subtree
@@ -111,8 +111,8 @@ foreach ($app in $apps) {
     if (-not (Test-Path $Py)) {
         throw "pinned interpreter disappeared: $Py — a captured app likely uninstalled it (see the Python.Python entry comment)"
     }
-    $cfg = "$env:TEMP\cairn-fp-$($app.Name).json"
-    $db  = "$env:TEMP\cairn-fp-$($app.Name).db"
+    $cfg = "$env:TEMP\treadmark-fp-$($app.Name).json"
+    $db  = "$env:TEMP\treadmark-fp-$($app.Name).db"
     $fp  = "footprint-windows11-$($app.Name).json"
     @{
         db_path = $db
@@ -123,7 +123,7 @@ foreach ($app in $apps) {
         registry_max_depth = 2
     } | ConvertTo-Json | Out-File -FilePath $cfg -Encoding ascii
 
-    & $Py -m cairn all init --config $cfg --force | Out-Null
+    & $Py -m treadmark all init --config $cfg --force | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    [i] $($app.Name): baseline failed — skipping"
         continue
@@ -153,7 +153,7 @@ foreach ($app in $apps) {
     }
     Start-Sleep -Seconds $settle
 
-    & $Py -m cairn footprint --config $cfg --app $app.Name --report $fp
+    & $Py -m treadmark footprint --config $cfg --app $app.Name --report $fp
     # Exit 1 = install delta found. But a crashed interpreter/module also
     # exits 1 — require the report file to actually exist before trusting it.
     if ($LASTEXITCODE -ne 1 -or -not (Test-Path $fp)) {
@@ -190,7 +190,7 @@ foreach ($app in $apps) {
 
 if ($captured -eq 0) { throw "no app produced a footprint — see per-app [i] lines above" }
 Write-Host "`nWIN11 FOOTPRINT PASS ($captured/$($apps.Count) apps captured)"
-# Reset the exit code: the last app's `cairn footprint` legitimately exits 1
+# Reset the exit code: the last app's `treadmark footprint` legitimately exits 1
 # (changes present), and GitHub's pwsh wrapper exits the job with the trailing
 # $LASTEXITCODE — which would fail an otherwise-successful run.
 exit 0

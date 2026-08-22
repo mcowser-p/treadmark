@@ -1,9 +1,9 @@
 ---
 name: conventional-commits
-description: Write commit messages and PR titles for the cairn repo. Use whenever committing, amending, or opening/renaming a PR here — the format is enforced by CI and drives automated releases (wrong type = wrong or missing release).
+description: Write commit messages and PR titles for the treadmark repo. Use whenever committing, amending, or opening/renaming a PR here — the format is enforced by CI and drives automated releases (wrong type = wrong or missing release).
 ---
 
-# Conventional commits in cairn
+# Conventional commits in treadmark
 
 The squash-merged **PR title becomes the commit on `main`**, and
 python-semantic-release parses that commit to decide whether to release and
@@ -32,7 +32,7 @@ which version to bump. `pr-lint.yml` rejects malformed PR titles; the local
 
 Decision rules that trip people up:
 
-- Shipped default-config changes (`packaging/cairn.yaml`) are user-facing →
+- Shipped default-config changes (`packaging/treadmark.yaml`) are user-facing →
   `feat(config):`, not `chore`.
 - New keys in report/footprint JSON output → `feat`; renaming/removing keys
   breaks SIEM consumers → needs `feat!:` (think hard first).

@@ -1,6 +1,6 @@
 # Install Footprint & Access Modeling
 
-`cairn footprint` answers one question: **what did this application's install actually touch?**
+`treadmark footprint` answers one question: **what did this application's install actually touch?**
 
 It produces a structured JSON model of every file, service, scheduled job, user, group, and privilege grant the install introduced — with the security-relevant objects parsed rather than left as raw file diffs. The intended consumer is an agent that derives a least-privilege access model.
 
@@ -21,20 +21,20 @@ Install footprint tells you the *declared* surface. Runtime observation tells yo
 
 ```sh
 # 1. On the clean OS, before the developer touches it
-sudo cairn files init --config /etc/cairn/cairn-footprint-linux.yaml
+sudo treadmark files init --config /etc/treadmark/treadmark-footprint-linux.yaml
 
 # 2. Hand the box over. Developer installs their application.
 
 # 3. Capture the footprint
-sudo cairn footprint \
-    --config /etc/cairn/cairn-footprint-linux.yaml \
+sudo treadmark footprint \
+    --config /etc/treadmark/treadmark-footprint-linux.yaml \
     --app myapp \
     --report myapp-footprint.json
 ```
 
 Exit code is `1` when a footprint was found (files changed), `0` when nothing changed, `2` on error.
 
-`packaging/cairn-footprint-linux.yaml` ships a config tuned for this job. Its exclude list is deliberately more aggressive than the forensic-drift config: it drops package-manager bookkeeping, caches, logs, generated symlink farms, and host-specific files (`/etc/machine-id`, `/etc/resolv.conf`, SSH host keys) that change on their own and would drown the signal.
+`packaging/treadmark-footprint-linux.yaml` ships a config tuned for this job. Its exclude list is deliberately more aggressive than the forensic-drift config: it drops package-manager bookkeeping, caches, logs, generated symlink farms, and host-specific files (`/etc/machine-id`, `/etc/resolv.conf`, SSH host keys) that change on their own and would drown the signal.
 
 `store_content: true` is **required**. The semantic parsers read `/etc/passwd`, `/etc/group`, sudoers, and systemd units out of the baseline to diff them. Without stored content there is nothing to diff against.
 
@@ -60,11 +60,11 @@ sudo ./scripts/container-rootfs.sh myapp-base:1.0 /tmp/rootfs/base
 sudo ./scripts/container-rootfs.sh myapp:1.4.0    /tmp/rootfs/app
 
 # Baseline the base image
-sudo cairn files init --config packaging/cairn-footprint-linux.yaml \
+sudo treadmark files init --config packaging/treadmark-footprint-linux.yaml \
     --root /tmp/rootfs/base --force
 
 # Footprint the derived image
-sudo cairn footprint --config packaging/cairn-footprint-linux.yaml \
+sudo treadmark footprint --config packaging/treadmark-footprint-linux.yaml \
     --root /tmp/rootfs/app --app myapp --report myapp-footprint.json
 ```
 
@@ -210,28 +210,28 @@ The output format for a full report is the Windows section map in the runbooks r
 
 ## Exporting Ansible access vars
 
-`--access-vars PATH` (or the standalone `cairn access-vars footprint.json -o PATH`) turns a Linux footprint into a ready-to-review Ansible vars file for the `declarative_access` role: bare service/timer names for scoped sudoers grants, quadlet-generated unit names, the installed unit/quadlet files (write ACLs), the config/state/log folders the install created, ownership entries for paths owned by install-created accounts, and `loginctl` linger users for rootless quadlets.
+`--access-vars PATH` (or the standalone `treadmark access-vars footprint.json -o PATH`) turns a Linux footprint into a ready-to-review Ansible vars file for the `declarative_access` role: bare service/timer names for scoped sudoers grants, quadlet-generated unit names, the installed unit/quadlet files (write ACLs), the config/state/log folders the install created, ownership entries for paths owned by install-created accounts, and `loginctl` linger users for rootless quadlets.
 
 ```sh
-sudo cairn footprint --config ... --app myapp \
+sudo treadmark footprint --config ... --app myapp \
     --report myapp-footprint.json --access-vars myapp-access.yml
 # or later, from the archived JSON:
-cairn access-vars myapp-footprint.json -o myapp-access.yml
+treadmark access-vars myapp-footprint.json -o myapp-access.yml
 ```
 
-WHO gets the access is deliberately not in the file — the operator passes `-e group_name=...` at apply time. Review the file before applying; it inherits the install-time caveat at the top of this document. The end-to-end workflow, the vars contract, and the security tradeoffs live in the ansible-declarative-access repo (`docs/declarative-systemd-access.md` there); cairn only emits the vars.
+WHO gets the access is deliberately not in the file — the operator passes `-e group_name=...` at apply time. Review the file before applying; it inherits the install-time caveat at the top of this document. The end-to-end workflow, the vars contract, and the security tradeoffs live in the ansible-declarative-access repo (`docs/declarative-systemd-access.md` there); treadmark only emits the vars.
 
 ## Windows
 
-Windows services (reconstructed from the registry `Services` subtree) and scheduled tasks (parsed from their Task Scheduler XML) are extracted as semantic objects, the same way systemd units are on Linux — each carries its run-as identity, start type, and image path, and file entries carry the Windows owner + DACL (the analog of Linux mode/owner/group). Run `cairn all init` on the clean OS (not just `cairn files init`) so the registry half is baselined.
+Windows services (reconstructed from the registry `Services` subtree) and scheduled tasks (parsed from their Task Scheduler XML) are extracted as semantic objects, the same way systemd units are on Linux — each carries its run-as identity, start type, and image path, and file entries carry the Windows owner + DACL (the analog of Linux mode/owner/group). Run `treadmark all init` on the clean OS (not just `treadmark files init`) so the registry half is baselined.
 
 Windows models also carry `access_hints`, in the same shape as Linux: one entry per principal the install introduced (each service's run-as account, each scheduled task's identity), listing the paths it plausibly needs with the evidence — the service binary from `ImagePath` (read+execute), config paths passed as `ImagePath` arguments (read), and files the installer chowned to that account (read+write). SYSTEM/builtin identities get no ownership-derived paths for the same reason root doesn't on Linux: they own most of the OS by default, so ownership carries no signal. Kernel drivers are excluded — they aren't user-mode principals. The enforcement side belongs to the operator: scope DACLs (`icacls`) to those principals, prefer virtual service accounts (`NT SERVICE\<name>`) or gMSAs over LocalSystem, grant service accounts only `SeServiceLogonRight`, and use the per-file `sha256` inventory as AppLocker/WDAC allowlist input.
 
-Because Windows rewrites service registry keys as normal background activity — the time service updates `LastKnownGoodTime` on every NTP sync, Defender churns on definition updates, and BITS / the update + servicing stack toggle during any feature install — an install footprint would otherwise be full of services the installer never touched. `cairn footprint` drops these known background-churn services by default (the list is `winsemantic.NOISE_SERVICES`), so the model shows what the installer actually did. Pass `--include-noise` to keep them. This filtering is footprint-only: the FIM monitor (`cairn registry` / `cairn all`) keeps every change, because a Defender or time-service edit may be exactly the tampering you want to catch.
+Because Windows rewrites service registry keys as normal background activity — the time service updates `LastKnownGoodTime` on every NTP sync, Defender churns on definition updates, and BITS / the update + servicing stack toggle during any feature install — an install footprint would otherwise be full of services the installer never touched. `treadmark footprint` drops these known background-churn services by default (the list is `winsemantic.NOISE_SERVICES`), so the model shows what the installer actually did. Pass `--include-noise` to keep them. This filtering is footprint-only: the FIM monitor (`treadmark registry` / `treadmark all`) keeps every change, because a Defender or time-service edit may be exactly the tampering you want to catch.
 
 ## Known gaps
 
-- **COM registrations, firewall rules, and WMI subscriptions are not parsed** on Windows. `cairn registry` captures the underlying registry keys, but nothing turns those particular key shapes into semantic objects yet. (Windows services and scheduled tasks *are* parsed — see above.)
+- **COM registrations, firewall rules, and WMI subscriptions are not parsed** on Windows. `treadmark registry` captures the underlying registry keys, but nothing turns those particular key shapes into semantic objects yet. (Windows services and scheduled tasks *are* parsed — see above.)
 - **No runtime observation.** By design. See the caveat at the top.
 - **Network posture is invisible.** Listening ports are a runtime property. `AmbientCapabilities=CAP_NET_BIND_SERVICE` hints at a privileged port, but the actual bind isn't in this document.
 - **Installer-run scripts leave no trace of intent.** If a postinstall script runs `chmod 777 /srv/data`, the footprint records the resulting mode. It cannot tell you the script did it deliberately or by accident.

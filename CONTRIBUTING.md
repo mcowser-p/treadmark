@@ -1,4 +1,4 @@
-# Contributing to cairn
+# Contributing to treadmark
 
 > **AI coding agents** (Codex, Claude Code, Copilot, …): see
 > [AGENTS.md](AGENTS.md) for repo layout, testing rules, and invariants.
@@ -7,7 +7,7 @@
 
 ## How releases work
 
-cairn uses [Conventional Commits](https://www.conventionalcommits.org/) to drive automated releases. Every PR title that lands on `main` is parsed by [python-semantic-release](https://python-semantic-release.readthedocs.io/), which decides whether a release is warranted and what the next version number should be.
+treadmark uses [Conventional Commits](https://www.conventionalcommits.org/) to drive automated releases. Every PR title that lands on `main` is parsed by [python-semantic-release](https://python-semantic-release.readthedocs.io/), which decides whether a release is warranted and what the next version number should be.
 
 You don't tag releases by hand. You don't bump the version in `pyproject.toml` by hand. Both happen automatically when a release-worthy commit hits `main`.
 

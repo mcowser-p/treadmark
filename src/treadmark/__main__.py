@@ -1,7 +1,7 @@
-"""Unified CLI: `cairn files <cmd>`, `cairn registry <cmd>`, etc.
+"""Unified CLI: `treadmark files <cmd>`, `treadmark registry <cmd>`, etc.
 
-Installed as the `cairn` console script via pyproject.toml. Also runnable as
-`python -m cairn` for development.
+Installed as the `treadmark` console script via pyproject.toml. Also runnable as
+`python -m treadmark` for development.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from . import __version__, files, winreg_mon, compare
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="cairn",
+        prog="treadmark",
         description="Cross-platform File Integrity Monitor",
     )
-    p.add_argument("--version", action="version", version=f"cairn {__version__}")
+    p.add_argument("--version", action="version", version=f"treadmark {__version__}")
     sub = p.add_subparsers(dest="subsystem", required=True)
 
     # ----- files -----
@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     pf.add_argument("--format", dest="report_format",
                     choices=["json", "ndjson", "csv", "sarif", "md", "html", "txt"],
                     help="Force report format. Otherwise inferred from --report extension.")
-    # Flags for `update`. cairn requires explicit opt-in so it doesn't
+    # Flags for `update`. treadmark requires explicit opt-in so it doesn't
     # silently erase forensic evidence of what changed.
     pf.add_argument("--accept", action="append", default=[], metavar="PATH",
                     help="Accept changes for this path (repeatable). For directories, "
@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     # paws = sub.add_parser("aws",
     #                       help="AWS account-configuration drift monitor "
     #                            "(baseline + scan; requires boto3 via "
-    #                            "`pip install cairn[aws]`)")
+    #                            "`pip install treadmark[aws]`)")
     # paws.add_argument("command", choices=["init", "scan", "update", "verify"])
     # paws.add_argument("--config", "-c")
     # paws.add_argument("--json", action="store_true")
@@ -86,14 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
     #                   help="Force report format (else inferred from --report)")
 
     # ----- azure / gcp / k8s (SCAFFOLD — untested; uncomment to wire) -----
-    # Modules src/cairn/azmon.py, gcpmon.py, k8smon.py exist and follow the
+    # Modules src/treadmark/azmon.py, gcpmon.py, k8smon.py exist and follow the
     # awsmon shape, but are unwired pending real-tenant/cluster validation. To
     # enable: uncomment these subparsers, the dispatch branches in main(), and
     # the azure/gcp/k8s extras in pyproject.toml; then add fake-client tests.
     #
-    # for _name, _help in (("azure", "Azure account-config drift (needs cairn[azure])"),
-    #                      ("gcp",   "GCP account-config drift (needs cairn[gcp])"),
-    #                      ("k8s",   "Kubernetes cluster-config drift (needs cairn[k8s])")):
+    # for _name, _help in (("azure", "Azure account-config drift (needs treadmark[azure])"),
+    #                      ("gcp",   "GCP account-config drift (needs treadmark[gcp])"),
+    #                      ("k8s",   "Kubernetes cluster-config drift (needs treadmark[k8s])")):
     #     _p = sub.add_parser(_name, help=_help)
     #     _p.add_argument("command", choices=["init", "scan", "update", "verify"])
     #     _p.add_argument("--config", "-c")
@@ -112,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Compare this host (or a baseline) against another baseline")
     pc_sub = pc.add_subparsers(dest="compare_mode", required=True)
 
-    # `cairn compare against <golden.db> --config local.yaml`
+    # `treadmark compare against <golden.db> --config local.yaml`
     pca = pc_sub.add_parser("against",
                             help="Walk this host and compare to a golden baseline DB")
     pca.add_argument("golden_db", help="Path to the reference baseline DB")
@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Local config (which paths to walk on THIS host)")
     pca.add_argument("--json", action="store_true")
 
-    # `cairn compare baselines <a.db> <b.db>`
+    # `treadmark compare baselines <a.db> <b.db>`
     pcb = pc_sub.add_parser("baselines",
                             help="Diff two baseline databases (no filesystem walk)")
     pcb.add_argument("db_a", help="First baseline DB")
@@ -157,7 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
                               "vars file for the declarative_access role "
                               "(same output as `footprint --access-vars`)")
     pav.add_argument("footprint_json",
-                     help="Footprint JSON produced by `cairn footprint --report`")
+                     help="Footprint JSON produced by `treadmark footprint --report`")
     pav.add_argument("-o", "--out", metavar="PATH",
                      help="Write the vars YAML to PATH. Use '-' or omit for stdout.")
 

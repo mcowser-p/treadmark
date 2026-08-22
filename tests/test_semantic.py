@@ -1,4 +1,4 @@
-"""Pure parser tests for cairn.semantic — quadlets and timer directives.
+"""Pure parser tests for treadmark.semantic — quadlets and timer directives.
 
 No rootfs fixture and no platform skips: these exercise string parsing only,
 so they run everywhere (including Windows).
@@ -6,7 +6,7 @@ so they run everywhere (including Windows).
 
 from __future__ import annotations
 
-from cairn import semantic as sem
+from treadmark import semantic as sem
 
 
 # ---------------------------------------------------------------------------

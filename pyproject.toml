@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cairn"
+name = "treadmark"
 version = "0.10.0"
 description = "Cross-platform File Integrity Monitor (Linux + Windows)"
 readme = "README.md"
@@ -40,15 +40,15 @@ build   = ["pyinstaller>=6.0"]
 dev     = ["pytest>=7.4", "PyYAML>=6.0"]
 
 [project.scripts]
-cairn = "cairn.__main__:main"
+treadmark = "treadmark.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/mcowser-p/cairn"
-Repository = "https://github.com/mcowser-p/cairn"
-Issues = "https://github.com/mcowser-p/cairn/issues"
+Homepage = "https://github.com/mcowser-p/treadmark"
+Repository = "https://github.com/mcowser-p/treadmark"
+Issues = "https://github.com/mcowser-p/treadmark/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cairn"]
+packages = ["src/treadmark"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -75,10 +75,10 @@ addopts = "-q"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-# Keep the package's __version__ (what `cairn --version` prints) in lockstep
+# Keep the package's __version__ (what `treadmark --version` prints) in lockstep
 # with the released version — otherwise the shipped binary reports a stale
 # number (the PyInstaller build can't read dist metadata at runtime).
-version_variables = ["src/cairn/__init__.py:__version__"]
+version_variables = ["src/treadmark/__init__.py:__version__"]
 branch = "main"
 build_command = ""                       # we build artifacts in a separate job
 upload_to_pypi = false                   # we ship .deb/.rpm/.msi, not a PyPI package

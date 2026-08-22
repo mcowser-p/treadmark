@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from cairn import files
+from treadmark import files
 
 
 def test_get_root_prefix_empty_slash_and_trailing(tmp_path):

@@ -1,4 +1,4 @@
-"""cairn.semantic — parse security-relevant objects out of an install footprint.
+"""treadmark.semantic — parse security-relevant objects out of an install footprint.
 
 The scan machinery tells you *which* files changed. This module tells you what
 those changes *mean*: which systemd services were registered and what identity

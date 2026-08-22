@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/container-rootfs.sh
 #
-# Extract a container image's filesystem to a directory that `cairn --root`
+# Extract a container image's filesystem to a directory that `treadmark --root`
 # can scan.
 #
 #   ./scripts/container-rootfs.sh myapp:1.4.0 /tmp/rootfs/myapp
@@ -56,11 +56,11 @@ trap '"$RUNTIME" rm -f "$CID" >/dev/null 2>&1 || true' EXIT
 
 echo ">>> exporting filesystem to $DEST"
 # --same-owner/--preserve-permissions keep uid/gid and setuid bits, which
-# cairn's ownership attribution and setuid detection depend on. That needs
+# treadmark's ownership attribution and setuid detection depend on. That needs
 # root. Without root we extract explicitly degraded (--no-same-owner) and say
 # so loudly. No silent fallback: a genuine extraction failure (disk full,
 # corrupt stream) must fail the script, not masquerade as a degraded success.
-# (`cairn footprint --root` independently detects degraded trees and stamps
+# (`treadmark footprint --root` independently detects degraded trees and stamps
 # `fidelity: degraded` into the report.)
 if [ "$(id -u)" -eq 0 ]; then
     "$RUNTIME" export "$CID" | tar -x -C "$DEST" --same-owner --preserve-permissions
@@ -81,5 +81,5 @@ echo "meta:   ${DEST%/}.inspect.json"
 echo ""
 echo "Next:"
 echo "  # baseline the base image, then footprint the derived image"
-echo "  cairn files init --config cairn-footprint-linux.yaml --root /tmp/rootfs/base --force"
-echo "  cairn footprint --config cairn-footprint-linux.yaml --root $DEST --app ${IMAGE%%:*} --report footprint.json"
+echo "  treadmark files init --config treadmark-footprint-linux.yaml --root /tmp/rootfs/base --force"
+echo "  treadmark footprint --config treadmark-footprint-linux.yaml --root $DEST --app ${IMAGE%%:*} --report footprint.json"

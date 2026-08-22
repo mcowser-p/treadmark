@@ -4,10 +4,10 @@ Files in this directory:
 
 | File | Purpose |
 |---|---|
-| `cairn.wxs` | WiX source — defines the MSI's structure, files, PATH entry, ARP entry, upgrade behavior |
+| `treadmark.wxs` | WiX source — defines the MSI's structure, files, PATH entry, ARP entry, upgrade behavior |
 | `License.rtf` | Shown in the installer's license-agreement dialog. Replace with your real license. |
-| `cairn.ico` | Icon shown in "Programs and Features". Replace with your branded icon. |
-| `examples/register-cairn-task.ps1` | Operator-run script to register the hourly scheduled task. |
+| `treadmark.ico` | Icon shown in "Programs and Features". Replace with your branded icon. |
+| `examples/register-treadmark-task.ps1` | Operator-run script to register the hourly scheduled task. |
 
 ## Building the MSI
 
@@ -21,50 +21,50 @@ dotnet tool install -g wix
 wix extension add -g WixToolset.UI.wixext
 wix extension add -g WixToolset.Util.wixext
 
-# build (run from this directory; expects cairn-windows-x86_64.exe and cairn.yaml staged here)
-wix build cairn.wxs `
+# build (run from this directory; expects treadmark-windows-x86_64.exe and treadmark.yaml staged here)
+wix build treadmark.wxs `
     -arch x64 `
     -d Version=0.2.0 `
     -ext WixToolset.UI.wixext `
     -ext WixToolset.Util.wixext `
-    -o cairn-0.2.0.msi
+    -o treadmark-0.2.0.msi
 ```
 
 ## Testing the install
 
 ```powershell
 # Quiet install (basic UI, no prompts):
-msiexec /i cairn-0.2.0.msi /qb /l*v install.log
+msiexec /i treadmark-0.2.0.msi /qb /l*v install.log
 
 # Verify the install:
-cairn --version                                  # should print version
-Test-Path "$env:ProgramData\Cairn\cairn.yaml"    # should be True
-Test-Path "$env:ProgramFiles\Cairn\cairn.exe"    # should be True
+treadmark --version                                  # should print version
+Test-Path "$env:ProgramData\Treadmark\treadmark.yaml"    # should be True
+Test-Path "$env:ProgramFiles\Treadmark\treadmark.exe"    # should be True
 
 # Build the baseline + a manual scan (files AND registry — `all` runs both):
-cairn all init --config "$env:ProgramData\Cairn\cairn.yaml"
-cairn all scan --config "$env:ProgramData\Cairn\cairn.yaml"
+treadmark all init --config "$env:ProgramData\Treadmark\treadmark.yaml"
+treadmark all scan --config "$env:ProgramData\Treadmark\treadmark.yaml"
 
 # Scheduling is a manual ops decision — register an hourly scan yourself, e.g.:
-#   schtasks /create /tn "Cairn scan" /tr "cairn all scan --config C:\ProgramData\Cairn\cairn.yaml" /sc hourly /ru SYSTEM
+#   schtasks /create /tn "Treadmark scan" /tr "treadmark all scan --config C:\ProgramData\Treadmark\treadmark.yaml" /sc hourly /ru SYSTEM
 
 # Uninstall:
-msiexec /x cairn-0.2.0.msi /qb
+msiexec /x treadmark-0.2.0.msi /qb
 # Verify operator data was preserved:
-Test-Path "$env:ProgramData\Cairn\cairn.yaml"    # should still be True
-Test-Path "$env:ProgramData\Cairn\baseline.db"   # should still be True
+Test-Path "$env:ProgramData\Treadmark\treadmark.yaml"    # should still be True
+Test-Path "$env:ProgramData\Treadmark\baseline.db"   # should still be True
 ```
 
 ## Things you'll want to customize before shipping
 
-1. **`UpgradeCode` GUID in `cairn.wxs`**. Currently `930ffdcd-a101-4776-8189-816e224d76fb` for cairn. Once you ship a release using a given GUID, that value is permanent for your product line — never change it. Generate a fresh one for any fork with `[guid]::NewGuid()` in PowerShell.
-2. **`Manufacturer` and `RegistryKey` paths**. Change `Your Org` and `Software\YourOrg\Cairn` to your actual organization name.
+1. **`UpgradeCode` GUID in `treadmark.wxs`**. Currently `930ffdcd-a101-4776-8189-816e224d76fb` for treadmark. Once you ship a release using a given GUID, that value is permanent for your product line — never change it. Generate a fresh one for any fork with `[guid]::NewGuid()` in PowerShell.
+2. **`Manufacturer` and `RegistryKey` paths**. Change `Your Org` and `Software\YourOrg\Treadmark` to your actual organization name.
 3. **`License.rtf`** — replace with your real license text.
-4. **`cairn.ico`** — replace with a real icon.
+4. **`treadmark.ico`** — replace with a real icon.
 5. **Code signing.** Production MSIs should be Authenticode-signed or AV will flag them and SmartScreen will warn users. After `wix build`:
    ```powershell
    signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
-                 /a cairn-0.2.0.msi
+                 /a treadmark-0.2.0.msi
    ```
 
 ## Common gotchas
@@ -72,4 +72,4 @@ Test-Path "$env:ProgramData\Cairn\baseline.db"   # should still be True
 - **Upgrade doesn't replace the old version**: you changed the `UpgradeCode`. Don't.
 - **Install fails with "WixUI not found"**: missing `-ext WixToolset.UI.wixext` on the build command.
 - **PATH update doesn't take effect immediately**: existing terminals don't see PATH changes. Open a fresh terminal. Or broadcast `WM_SETTINGCHANGE` (advanced; usually not worth it for a server tool).
-- **Scheduled task not running**: it isn't registered automatically. Run `examples\register-cairn-task.ps1` as Administrator after edit­ing `cairn.yaml`.
+- **Scheduled task not running**: it isn't registered automatically. Run `examples\register-treadmark-task.ps1` as Administrator after edit­ing `treadmark.yaml`.

@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from cairn import files
+from treadmark import files
 
 
 def _cfg(tmp_path, tree):

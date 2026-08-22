@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from cairn import files
+from treadmark import files
 
 
 def test_defaults_when_no_path():

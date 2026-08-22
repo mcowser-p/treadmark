@@ -1,16 +1,16 @@
-# Cloud configuration drift with cairn
+# Cloud configuration drift with treadmark
 
-> **⚠ Status: DORMANT.** `cairn aws` shipped in 0.10.0 but is now a dormant
+> **⚠ Status: DORMANT.** `treadmark aws` shipped in 0.10.0 but is now a dormant
 > scaffold pending validation against a real AWS account — the published
 > product is the OS FIM (files/registry/footprint). The `awsmon` module and
 > its fake-client unit tests remain in the tree and must stay green; the CLI
 > subcommand and the `aws` pyproject extra are commented out (the same
 > treatment as azure/gcp/k8s below). This page describes the behavior once
 > re-wired. To re-enable: uncomment the `aws` subparser, `_run_aws`, and its
-> dispatch branch in `src/cairn/__main__.py`, plus the `aws` extra in
+> dispatch branch in `src/treadmark/__main__.py`, plus the `aws` extra in
 > `pyproject.toml`.
 
-`cairn aws` applies cairn's forensic model — a point-in-time **baseline**, an
+`treadmark aws` applies treadmark's forensic model — a point-in-time **baseline**, an
 offline **diff** on rescan, exit codes **0/1/2**, and SARIF/JSON reports — to
 an AWS account's security-relevant configuration. It answers "what changed in
 this account since I last approved its state?" without an always-on recorder.
@@ -25,7 +25,7 @@ turned off — surfaces on the next scan.
 ## Install (once re-enabled)
 
 ```
-pip install "cairn[aws]"
+pip install "treadmark[aws]"
 ```
 
 `boto3` is an optional dependency; the core package has none. Without it the
@@ -35,7 +35,7 @@ pip install "cairn[aws]"
 
 Credentials come from the standard boto3 chain: the `aws_profile` in your
 config, `--profile`, `AWS_PROFILE` / `AWS_ACCESS_KEY_*`, or an instance/task
-role. Every call cairn makes is **read-only**. The simplest grant is the
+role. Every call treadmark makes is **read-only**. The simplest grant is the
 AWS-managed **`SecurityAudit`** policy. A minimal custom policy covers exactly
 the shipped drivers:
 
@@ -66,14 +66,14 @@ the shipped drivers:
 
 ```bash
 # 1. Baseline the account on a day you consider it good.
-cairn aws init --config packaging/cairn-aws.yaml
+treadmark aws init --config packaging/treadmark-aws.yaml
 
 # 2. Later — scheduled, or after a change window — scan for drift.
-cairn aws scan --config packaging/cairn-aws.yaml --report drift.sarif
+treadmark aws scan --config packaging/treadmark-aws.yaml --report drift.sarif
 #    exit 0 = matches baseline, 1 = drift, 2 = error
 
 # 3. Once you've reviewed and accepted the new state, fold it in.
-cairn aws update --config packaging/cairn-aws.yaml
+treadmark aws update --config packaging/treadmark-aws.yaml
 ```
 
 By default `init` discovers and scans every **enabled** region; `aws_regions`
@@ -97,7 +97,7 @@ Broadening coverage means adding a driver to the `DRIVERS` registry in
 ## Noise: the volatile-fields concept
 
 An account changes on its own between scans — `PasswordLastUsed`,
-`LatestDeliveryTime`, `ResponseMetadata`. cairn strips a built-in list of these
+`LatestDeliveryTime`, `ResponseMetadata`. treadmark strips a built-in list of these
 **volatile** fields (at any nesting depth) before diffing, so background churn
 never reads as drift. If a field in *your* account misbehaves, add it to
 `aws_volatile_fields` in the config — the same denoise lever the Windows
@@ -114,7 +114,7 @@ sensitive — same care as a filesystem baseline.
 
 `--report drift.sarif` (or `.json` / `.md` / `.txt`, by extension; `--format`
 to force) writes the drift as **SARIF 2.1.0** with rule IDs
-`cairn.aws.added|modified|deleted` and the resource ARN as the location. That
+`treadmark.aws.added|modified|deleted` and the resource ARN as the location. That
 is the format GitHub code-scanning ingests. Wiring a scheduled workflow to
 upload it (or open issues) is a deliberate next step, not shipped here — note
 that SARIF **code-scanning alerts on private repos require GitHub Advanced

@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  cairn.wxs — WiX v4/v5/v6/v7 source for the Cairn MSI installer.
+  treadmark.wxs — WiX v4/v5/v6/v7 source for the Treadmark MSI installer.
 
   Build (run on a Windows host with .NET SDK):
       dotnet tool install -g wix
       wix extension add -g WixToolset.Util.wixext
       wix extension add -g WixToolset.UI.wixext
-      wix build cairn.wxs -arch x64 -d Version=0.2.0 -o cairn-0.2.0.msi `
+      wix build treadmark.wxs -arch x64 -d Version=0.2.0 -o treadmark-0.2.0.msi `
                 -ext WixToolset.Util.wixext `
                 -ext WixToolset.UI.wixext
 
   What this MSI does on install:
-    1. Copies cairn.exe to %ProgramFiles%\Cairn\
+    1. Copies treadmark.exe to %ProgramFiles%\Treadmark\
     2. Adds that folder to the system PATH
-    3. Drops a default config at %ProgramData%\Cairn\cairn.yaml (only if absent)
-    4. Creates the data directory %ProgramData%\Cairn\ (the baseline DB lives here)
+    3. Drops a default config at %ProgramData%\Treadmark\treadmark.yaml (only if absent)
+    4. Creates the data directory %ProgramData%\Treadmark\ (the baseline DB lives here)
     5. Adds an entry to "Programs and Features" so it can be uninstalled normally
 
   What this MSI deliberately does NOT do:
     - Register a Scheduled Task. Scheduling is an explicit ops decision —
       see windows\README.md for the schtasks one-liner.
-    - Build the initial baseline. Operators run `cairn files init` after
+    - Build the initial baseline. Operators run `treadmark files init` after
       editing the config.
 
   On uninstall:
-    - Removes cairn.exe and the install dir
-    - PRESERVES the config and baseline DB under %ProgramData%\Cairn (operators
+    - Removes treadmark.exe and the install dir
+    - PRESERVES the config and baseline DB under %ProgramData%\Treadmark (operators
       have tuned their config; never wipe it without an explicit gesture)
 
   On upgrade:
@@ -42,7 +42,7 @@
     placeholder). Do not regenerate once a release has shipped.
   -->
   <Package
-    Name="Cairn File Integrity Monitor"
+    Name="Treadmark File Integrity Monitor"
     Manufacturer="mcowser-p"
     Version="$(var.Version)"
     UpgradeCode="589f68fc-59fe-41a1-8ef8-2c2b31bdcc16"
@@ -56,31 +56,31 @@
 
     <MediaTemplate EmbedCab="yes" />
 
-    <Icon Id="CairnIcon" SourceFile="cairn.ico" />
-    <Property Id="ARPPRODUCTICON" Value="CairnIcon" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/mcowser-p/cairn" />
+    <Icon Id="TreadmarkIcon" SourceFile="treadmark.ico" />
+    <Property Id="ARPPRODUCTICON" Value="TreadmarkIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/mcowser-p/treadmark" />
     <!-- ARPNOMODIFY is owned by the WixUI_InstallDir dialog set; defining it
          here too is a duplicate-symbol error (WIX0091). Let the UI lib set it. -->
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Cairn" />
+      <Directory Id="INSTALLFOLDER" Name="Treadmark" />
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
-      <!-- C:\ProgramData\Cairn — config + baseline DB live here. -->
-      <Directory Id="DATAFOLDER" Name="Cairn" />
+      <!-- C:\ProgramData\Treadmark — config + baseline DB live here. -->
+      <Directory Id="DATAFOLDER" Name="Treadmark" />
     </StandardDirectory>
 
-    <Feature Id="Main" Title="Cairn" Level="1" Display="expand">
+    <Feature Id="Main" Title="Treadmark" Level="1" Display="expand">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentGroupRef Id="DataDir" />
       <ComponentGroupRef Id="EnvVars" />
     </Feature>
 
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Component Id="CairnExe" Guid="*">
-        <File Id="CairnExeFile"
-              Source="cairn-windows-x86_64.exe"
-              Name="cairn.exe"
+      <Component Id="TreadmarkExe" Guid="*">
+        <File Id="TreadmarkExeFile"
+              Source="treadmark-windows-x86_64.exe"
+              Name="treadmark.exe"
               KeyPath="yes" />
       </Component>
     </ComponentGroup>
@@ -92,8 +92,8 @@
       -->
       <Component Id="DefaultConfig" Guid="*" NeverOverwrite="yes" Permanent="yes">
         <File Id="DefaultConfigFile"
-              Source="cairn.yaml"
-              Name="cairn.yaml"
+              Source="treadmark.yaml"
+              Name="treadmark.yaml"
               KeyPath="yes" />
       </Component>
 
@@ -108,7 +108,7 @@
           <util:PermissionEx User="SYSTEM"          GenericAll="yes" />
         </CreateFolder>
         <RegistryValue Root="HKLM"
-                       Key="Software\mcowser-p\Cairn"
+                       Key="Software\mcowser-p\Treadmark"
                        Name="DataDir"
                        Type="string"
                        Value="[DATAFOLDER]"
@@ -126,7 +126,7 @@
                      System="yes"
                      Permanent="no" />
         <RegistryValue Root="HKLM"
-                       Key="Software\mcowser-p\Cairn"
+                       Key="Software\mcowser-p\Treadmark"
                        Name="PathRegistered"
                        Type="integer"
                        Value="1"

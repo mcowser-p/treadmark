@@ -5,13 +5,13 @@ CI computes the next release version up front (a no-side-effect
 `semantic-release version --print`) and builds the artifacts BEFORE the tag
 or GitHub Release exists — so nothing is published unless the build and smoke
 jobs go green. The build jobs call this to write that computed version into
-the working tree, so the .deb/.rpm/.msi metadata and `cairn --version` all
+the working tree, so the .deb/.rpm/.msi metadata and `treadmark --version` all
 report the version that is about to be released.
 
 These are the SAME two locations pinned in pyproject.toml's
 [tool.semantic_release] (version_toml + version_variables). Keep them in sync:
     version_toml      = ["pyproject.toml:project.version"]
-    version_variables = ["src/cairn/__init__.py:__version__"]
+    version_variables = ["src/treadmark/__init__.py:__version__"]
 
 Usage:  python scripts/stamp_version.py 1.2.3
 """
@@ -43,9 +43,9 @@ def main() -> None:
         r'^(version\s*=\s*)"[^"]*"',
         rf'\1"{version}"',
     )
-    # src/cairn/__init__.py -> __version__ = "X"
+    # src/treadmark/__init__.py -> __version__ = "X"
     _replace(
-        root / "src" / "cairn" / "__init__.py",
+        root / "src" / "treadmark" / "__init__.py",
         r'^(__version__\s*=\s*)"[^"]*"',
         rf'\1"{version}"',
     )

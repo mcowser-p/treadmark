@@ -1,10 +1,10 @@
-"""cairn.footprint — build an install-time footprint model for an application.
+"""treadmark.footprint — build an install-time footprint model for an application.
 
 Workflow this supports:
 
-    1. Baseline a clean OS image        cairn files init --config clean.yaml
+    1. Baseline a clean OS image        treadmark files init --config clean.yaml
     2. Hand the box to a developer; they install their application
-    3. Capture the footprint             cairn footprint --config clean.yaml \
+    3. Capture the footprint             treadmark footprint --config clean.yaml \
                                             --report footprint.json
 
 The output is a structured description of everything the install touched,
@@ -64,7 +64,7 @@ def _collect_changes(cfg: dict) -> tuple[list, list, list, list[str]]:
     """
     db_path = cfg["db_path"]
     if not os.path.exists(db_path):
-        raise FileNotFoundError(f"no baseline at {db_path}; run `cairn files init` first")
+        raise FileNotFoundError(f"no baseline at {db_path}; run `treadmark files init` first")
 
     conn = files_mod.open_db(db_path)
     try:
@@ -674,7 +674,7 @@ WINDOWS_CAVEAT = (
     "Windows. It does not describe runtime behaviour, and — because Windows "
     "accounts live in the SAM, not a readable file — it does not enumerate "
     "local accounts/groups the installer created. Reconstructed from the file "
-    "baseline plus the registry Services subtree; run `cairn all init` before "
+    "baseline plus the registry Services subtree; run `treadmark all init` before "
     "the install so both halves are captured. Merge with runtime observation "
     "before enforcing a policy."
 )
@@ -874,8 +874,8 @@ def build_model_windows(cfg: dict, app_name: Optional[str] = None) -> dict:
     try:
         reg_added, reg_modified, reg_deleted = winreg_mon.collect_changes(cfg)
     except FileNotFoundError:
-        registry_error = ("no registry baseline — run `cairn all init` (not just "
-                          "`cairn files init`) so services are captured")
+        registry_error = ("no registry baseline — run `treadmark all init` (not just "
+                          "`treadmark files init`) so services are captured")
 
     # An install footprint should show what the INSTALLER did, not OS background
     # churn (Defender definition updates, NTP time sync, the update/servicing

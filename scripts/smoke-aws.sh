@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/smoke-aws.sh — run the artifact smoke tests on REAL EC2 instances
-# launched from the AMIs cairn's users deploy on: Amazon Linux 2023 (x86_64 +
+# launched from the AMIs treadmark's users deploy on: Amazon Linux 2023 (x86_64 +
 # Graviton), Ubuntu 24.04, AlmaLinux 9/10, and Windows Server 2022/2025.
 #
 #   bash scripts/smoke-aws.sh setup                    # one-time infra (bucket + instance role)
@@ -32,7 +32,7 @@ REPO=$(pwd)
 # Constants
 # ---------------------------------------------------------------------------
 ALMA_OWNER_ID=764336703387       # AlmaLinux OS Foundation's AWS account
-INSTANCE_ROLE=cairn-smoke-instance
+INSTANCE_ROLE=treadmark-smoke-instance
 DEFAULT_PLATFORMS="al2023 al2023-arm64 ubuntu-2404 alma9 alma10 win2022 win2025"
 KNOWN_PLATFORMS="$DEFAULT_PLATFORMS ubuntu-2404-arm64"
 # Distros whose repo package set smoke-test.sh's footprint captures know.
@@ -97,7 +97,7 @@ awsx() { aws ${PROFILE:+--profile "$PROFILE"} --region "$REGION" "$@"; }
 
 ACCOUNT=$(awsx sts get-caller-identity --query Account --output text) \
     || die "cannot resolve AWS identity (credentials?)"
-BUCKET="cairn-smoke-${ACCOUNT}-${REGION}"
+BUCKET="treadmark-smoke-${ACCOUNT}-${REGION}"
 
 # ---------------------------------------------------------------------------
 # Platform table. platform_spec <id> sets the P_* globals.
@@ -107,32 +107,32 @@ platform_spec() {
     case "$1" in
         al2023)
             P_AMI_KEY=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-            P_ARTGLOB='cairn-*.x86_64.rpm' ;;
+            P_ARTGLOB='treadmark-*.x86_64.rpm' ;;
         al2023-arm64)
             P_AMI_KEY=/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
             P_ITYPE=t4g.small
-            P_ARTGLOB='cairn-*.aarch64.rpm' ;;
+            P_ARTGLOB='treadmark-*.aarch64.rpm' ;;
         ubuntu-2404)
             P_AMI_KEY=/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
-            P_ARTGLOB='cairn_*_amd64.deb' ;;
+            P_ARTGLOB='treadmark_*_amd64.deb' ;;
         ubuntu-2404-arm64)
             P_AMI_KEY=/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id
             P_ITYPE=t4g.small
-            P_ARTGLOB='cairn_*_arm64.deb' ;;
+            P_ARTGLOB='treadmark_*_arm64.deb' ;;
         alma9)
             P_AMI_MODE=alma P_AMI_KEY='AlmaLinux OS 9*'
-            P_ARTGLOB='cairn-*.x86_64.rpm' ;;
+            P_ARTGLOB='treadmark-*.x86_64.rpm' ;;
         alma10)
             P_AMI_MODE=alma P_AMI_KEY='AlmaLinux OS 10*'
-            P_ARTGLOB='cairn-*.x86_64.rpm' ;;
+            P_ARTGLOB='treadmark-*.x86_64.rpm' ;;
         win2022)
             P_OS=windows P_ITYPE=t3.medium P_TIMEOUT=35
             P_AMI_KEY=/aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base
-            P_ARTGLOB='cairn-*.msi' ;;
+            P_ARTGLOB='treadmark-*.msi' ;;
         win2025)
             P_OS=windows P_ITYPE=t3.medium P_TIMEOUT=35
             P_AMI_KEY=/aws/service/ami-windows-latest/Windows_Server-2025-English-Full-Base
-            P_ARTGLOB='cairn-*.msi' ;;
+            P_ARTGLOB='treadmark-*.msi' ;;
         *) die "unknown platform: $1 (known: $KNOWN_PLATFORMS)" ;;
     esac
     if [ "$P_OS" = linux ] && [ "$EXTENDED" = 1 ]; then P_TIMEOUT=45; fi
@@ -177,7 +177,7 @@ ensure_bucket() {
         --public-access-block-configuration \
         "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
     awsx s3api put-bucket-tagging --bucket "$BUCKET" \
-        --tagging 'TagSet=[{Key=Project,Value=cairn-smoke}]'
+        --tagging 'TagSet=[{Key=Project,Value=treadmark-smoke}]'
     # Run artifacts are disposable — expire them instead of sweeping.
     awsx s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
         --lifecycle-configuration '{"Rules":[{"ID":"expire-runs","Status":"Enabled",
@@ -185,7 +185,7 @@ ensure_bucket() {
 }
 
 cmd_setup() {
-    step "cairn-smoke setup (account $ACCOUNT, region $REGION)"
+    step "treadmark-smoke setup (account $ACCOUNT, region $REGION)"
     ensure_bucket
 
     if awsx iam get-role --role-name "$INSTANCE_ROLE" >/dev/null 2>&1; then
@@ -196,13 +196,13 @@ cmd_setup() {
             --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{
               "Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},
               "Action":"sts:AssumeRole"}]}' \
-            --tags Key=Project,Value=cairn-smoke >/dev/null
+            --tags Key=Project,Value=treadmark-smoke >/dev/null
     fi
     awsx iam put-role-policy --role-name "$INSTANCE_ROLE" \
         --policy-name results-put-only \
         --policy-document '{"Version":"2012-10-17","Statement":[{
           "Effect":"Allow","Action":"s3:PutObject",
-          "Resource":"arn:aws:s3:::cairn-smoke-*/runs/*/results/*"}]}'
+          "Resource":"arn:aws:s3:::treadmark-smoke-*/runs/*/results/*"}]}'
 
     if awsx iam get-instance-profile --instance-profile-name "$INSTANCE_ROLE" >/dev/null 2>&1; then
         note "instance profile exists: $INSTANCE_ROLE"
@@ -216,7 +216,7 @@ cmd_setup() {
 }
 
 # ---------------------------------------------------------------------------
-# sweep — terminate anything tagged Project=cairn-smoke older than --hours
+# sweep — terminate anything tagged Project=treadmark-smoke older than --hours
 # ---------------------------------------------------------------------------
 cmd_sweep() {
     local epoch cutoff ids
@@ -224,9 +224,9 @@ cmd_sweep() {
     # BSD (macOS) date first, GNU fallback.
     cutoff=$(date -u -r "$epoch" +%Y-%m-%dT%H:%M:%S 2>/dev/null \
           || date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%S)
-    step "sweep: cairn-smoke instances launched before ${cutoff}Z"
+    step "sweep: treadmark-smoke instances launched before ${cutoff}Z"
     ids=$(awsx ec2 describe-instances \
-        --filters "Name=tag:Project,Values=cairn-smoke" \
+        --filters "Name=tag:Project,Values=treadmark-smoke" \
                   "Name=instance-state-name,Values=pending,running,stopping,stopped" \
         --query "Reservations[].Instances[?LaunchTime<'$cutoff'][].InstanceId" \
         --output text | tr '\t' ' ')
@@ -241,7 +241,7 @@ cmd_sweep() {
     # rerun after the instances above finish terminating).
     local sgs sg
     sgs=$(awsx ec2 describe-security-groups \
-        --filters "Name=group-name,Values=cairn-smoke-*" \
+        --filters "Name=group-name,Values=treadmark-smoke-*" \
         --query 'SecurityGroups[].GroupId' --output text | tr '\t' ' ')
     for sg in $sgs; do
         if awsx ec2 delete-security-group --group-id "$sg" >/dev/null 2>&1; then
@@ -416,10 +416,10 @@ create_sg() {
     # URLs all need outbound).
     # NB: EC2 rejects non-ASCII in GroupDescription — keep this plain.
     SG_ID=$(awsx ec2 create-security-group \
-        --group-name "cairn-smoke-$RUN_ID" \
-        --description "cairn EC2 smoke $RUN_ID (no ingress, egress only)" \
+        --group-name "treadmark-smoke-$RUN_ID" \
+        --description "treadmark EC2 smoke $RUN_ID (no ingress, egress only)" \
         --vpc-id "$vpc" \
-        --tag-specifications "ResourceType=security-group,Tags=[{Key=Project,Value=cairn-smoke},{Key=RunId,Value=$RUN_ID}]" \
+        --tag-specifications "ResourceType=security-group,Tags=[{Key=Project,Value=treadmark-smoke},{Key=RunId,Value=$RUN_ID}]" \
         --query GroupId --output text)
     note "security group: $SG_ID (no ingress)"
 }
@@ -438,8 +438,8 @@ launch_platform() {  # launch_platform <idx> <platform> <ami> <userdata-file>
             --instance-initiated-shutdown-behavior terminate \
             --user-data "file://$ud" \
             --tag-specifications \
-              "ResourceType=instance,Tags=[{Key=Project,Value=cairn-smoke},{Key=RunId,Value=$RUN_ID},{Key=Platform,Value=$p},{Key=Name,Value=cairn-smoke-$RUN_ID-$p}]" \
-              "ResourceType=volume,Tags=[{Key=Project,Value=cairn-smoke},{Key=RunId,Value=$RUN_ID}]" \
+              "ResourceType=instance,Tags=[{Key=Project,Value=treadmark-smoke},{Key=RunId,Value=$RUN_ID},{Key=Platform,Value=$p},{Key=Name,Value=treadmark-smoke-$RUN_ID-$p}]" \
+              "ResourceType=volume,Tags=[{Key=Project,Value=treadmark-smoke},{Key=RunId,Value=$RUN_ID}]" \
             --query 'Instances[0].InstanceId' --output text 2>"$OUT_DIR/launch-$p.err"); then
             break
         fi
@@ -485,7 +485,7 @@ classify() {  # classify <idx> <platform> — after fetch_results/fetch_console
     elif [ -f "$OUT_DIR/$p/console.txt" ]; then
         # Marker echoed to the serial console — upload path failed but the
         # smoke itself ran.
-        rc=$(grep -o "CAIRN-SMOKE-RESULT: $p [0-9]*" "$OUT_DIR/$p/console.txt" \
+        rc=$(grep -o "TREADMARK-SMOKE-RESULT: $p [0-9]*" "$OUT_DIR/$p/console.txt" \
              | tail -n1 | grep -o '[0-9]*$' || true)
         [ -n "$rc" ] && NOTES[$idx]="via console fallback (S3 upload failed)"
     fi
@@ -572,7 +572,7 @@ print_summary() {
         idx=$((idx + 1))
     done
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        { echo "### cairn EC2 AMI smoke — $RUN_ID"; echo ""; printf "$md"; echo ""; } \
+        { echo "### treadmark EC2 AMI smoke — $RUN_ID"; echo ""; printf "$md"; echo ""; } \
             >> "$GITHUB_STEP_SUMMARY"
     fi
     return "$fail"
@@ -619,7 +619,7 @@ cmd_run() {
     OUT_DIR="$REPO/smoke-out/aws/$RUN_ID"
     mkdir -p "$OUT_DIR"
 
-    step "cairn EC2 AMI smoke — run $RUN_ID (account $ACCOUNT, region $REGION)"
+    step "treadmark EC2 AMI smoke — run $RUN_ID (account $ACCOUNT, region $REGION)"
     note "platforms: ${SELECTED[*]}"
 
     step "resolving AMIs"

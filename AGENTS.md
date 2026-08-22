@@ -1,4 +1,4 @@
-# AGENTS.md — guide for coding agents working on cairn
+# AGENTS.md — guide for coding agents working on treadmark
 
 This file is the canonical, tool-agnostic guide for AI coding agents
 (Codex, Claude Code, Copilot, Cursor, etc.). `CLAUDE.md` and
@@ -7,23 +7,23 @@ guidance changes, not the pointers.
 
 ## What this project is
 
-cairn is a forensic file-integrity tool for Linux (and, later, Windows):
+treadmark is a forensic file-integrity tool for Linux (and, later, Windows):
 baseline a filesystem into SQLite, scan for drift, compare across hosts,
-and capture install-time application footprints (`cairn footprint`) for
+and capture install-time application footprints (`treadmark footprint`) for
 least-privilege policy generation. Single binary, no agent, no daemon.
 
 ## Repository layout
 
 | Path | What lives there |
 |---|---|
-| `src/cairn/files.py` | Config loading, walking/hashing, SQLite baseline, scan/update/verify, `--root` logical-path mapping, rootfs fidelity check |
-| `src/cairn/__main__.py` | The real CLI (`cairn files/registry/compare/footprint/baseline`) |
-| `src/cairn/footprint.py` | Install-footprint model: collect → extract → access hints → risks |
-| `src/cairn/semantic.py` | Parsers: systemd units, cron, passwd/group diff, sudoers, setuid analysis |
-| `src/cairn/compare.py` | Golden-baseline compare (live-vs-DB and DB-vs-DB) |
-| `src/cairn/report.py` | 7 output formats (json/ndjson/csv/sarif/md/html/txt) |
-| `src/cairn/winreg_mon.py` | Windows registry monitor (dormant on Linux) |
-| `src/cairn/winsemantic.py` | Windows footprint parsers: services (from registry), scheduled tasks (from XML), path classification — pure, testable anywhere |
+| `src/treadmark/files.py` | Config loading, walking/hashing, SQLite baseline, scan/update/verify, `--root` logical-path mapping, rootfs fidelity check |
+| `src/treadmark/__main__.py` | The real CLI (`treadmark files/registry/compare/footprint/baseline`) |
+| `src/treadmark/footprint.py` | Install-footprint model: collect → extract → access hints → risks |
+| `src/treadmark/semantic.py` | Parsers: systemd units, cron, passwd/group diff, sudoers, setuid analysis |
+| `src/treadmark/compare.py` | Golden-baseline compare (live-vs-DB and DB-vs-DB) |
+| `src/treadmark/report.py` | 7 output formats (json/ndjson/csv/sarif/md/html/txt) |
+| `src/treadmark/winreg_mon.py` | Windows registry monitor (dormant on Linux) |
+| `src/treadmark/winsemantic.py` | Windows footprint parsers: services (from registry), scheduled tasks (from XML), path classification — pure, testable anywhere |
 | `tests/` | pytest suite — see "Testing" below |
 | `packaging/` | Shipped default configs, rpm spec, postinstall |
 | `scripts/` | Build scripts, `container-rootfs.sh` extraction helper |
@@ -75,7 +75,7 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
 
 ## Testing rules
 
-- Tests invoke the real CLI **in-process**: `cairn.__main__.main(argv)`
+- Tests invoke the real CLI **in-process**: `treadmark.__main__.main(argv)`
   returns an exit code (0 clean, 1 drift, 2 error) without calling
   `sys.exit`. Don't shell out except in the two packaging smoke tests.
 - Use **JSON configs** in tests (`make_config` fixture) — JSON needs no
@@ -91,7 +91,7 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
 
 ## Invariants — do not break these
 
-1. **Zero hard runtime dependencies** in `src/cairn/`. PyYAML is optional
+1. **Zero hard runtime dependencies** in `src/treadmark/`. PyYAML is optional
    (JSON configs work without it); pywin32 is optional and Windows-only.
    Do not add imports of third-party packages to the core.
 2. **Python ≥ 3.9.** Keep `from __future__ import annotations` at the top
@@ -108,7 +108,7 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
    globs or anchors. Extension excludes are case-insensitive.
 6. **Exit codes are API**: 0 = clean, 1 = drift, 2 = error. Alerting
    pipelines depend on them.
-7. **`cairn files update` must never silently accept changes** — explicit
+7. **`treadmark files update` must never silently accept changes** — explicit
    `--accept`/`--accept-all` is a forensic-integrity feature, not friction.
 8. **Fidelity/inspect.json handling is warn-only**: a degraded rootfs or a
    malformed `<root>.inspect.json` must never fail a scan or footprint.
@@ -118,21 +118,21 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
 ## Known-pending work (don't "fix" these in passing)
 
 - Org metadata is SET (2026-08: Apache-2.0, `mcowser-p`,
-  github.com/mcowser-p/cairn, GitHub-noreply maintainer address). Two values
+  github.com/mcowser-p/treadmark, GitHub-noreply maintainer address). Two values
   are permanent — do not change: the WiX `UpgradeCode` GUID and the MSI
-  state registry path `Software\mcowser-p\Cairn` (functional, not cosmetic).
+  state registry path `Software\mcowser-p\Treadmark` (functional, not cosmetic).
 - Windows CI is re-enabled but SOAKING: the release.yml windows jobs are
   `continue-on-error` so a flake can't hold Linux releases hostage. Flip to
   blocking (add them to attach.needs, drop continue-on-error) after a couple
   of clean releases. Org strings + License.rtf in windows/ are still
   placeholders (SETUP.md pre-publish TODO) — MSI installs, not brand-correct.
 - Windows semantic footprint: **services and scheduled tasks are now parsed**
-  (`src/cairn/winsemantic.py`; `cairn footprint` dispatches to
+  (`src/treadmark/winsemantic.py`; `treadmark footprint` dispatches to
   `build_model_windows` on Windows, reconstructing services from the registry
   Services subtree and tasks from Task XML). Still unbuilt: COM registration,
   firewall rules, and local account/group enumeration (Windows accounts live
   in the SAM, not a readable file) — the next gaps.
-- Cloud drift (`src/cairn/awsmon.py`): **DORMANT** — the `cairn aws`
+- Cloud drift (`src/treadmark/awsmon.py`): **DORMANT** — the `treadmark aws`
   subcommand, its dispatch, and the `aws` pyproject extra (plus boto3 in
   `all`) are commented out pending validation against a real AWS account.
   The module and its fake-client unit tests (`tests/test_awsmon.py`) remain

@@ -1,7 +1,7 @@
-"""cairn.winsemantic — parse security-relevant objects out of a Windows
+"""treadmark.winsemantic — parse security-relevant objects out of a Windows
 install footprint.
 
-The Windows analog of cairn.semantic. Where the Linux side reads systemd
+The Windows analog of treadmark.semantic. Where the Linux side reads systemd
 units and /etc/passwd, here we reconstruct:
 
   - Windows services   — from the registry Services subtree (the run-as
@@ -154,9 +154,9 @@ def service_name_from_key(key_path: str) -> Optional[str]:
 # every NTP sync, the Defender family churns on definition updates, and BITS /
 # the update + servicing stack toggle during any background transfer or feature
 # install. In an INSTALL FOOTPRINT — "what did this installer write?" — these
-# are noise, so `cairn footprint` drops them by default (override with
+# are noise, so `treadmark footprint` drops them by default (override with
 # footprint_include_noise / `--include-noise`). They are deliberately NOT
-# filtered by the FIM registry monitor (`cairn registry` / `all`), where a
+# filtered by the FIM registry monitor (`treadmark registry` / `all`), where a
 # Defender or time-service change may be exactly the tampering you want to see.
 NOISE_SERVICES = frozenset({
     "w32time",          # NTP: LastKnownGoodTime updates itself
@@ -180,7 +180,7 @@ def is_noise_service(name: Optional[str]) -> bool:
 def parse_windows_services(reg_records) -> list[WindowsService]:
     """Reconstruct WindowsService objects from registry records under
     ...\\Services\\<name>. `reg_records` is any iterable of objects with
-    `.key_path`, `.value_name`, `.value_repr` (cairn.winreg_mon.RegRecord).
+    `.key_path`, `.value_name`, `.value_repr` (treadmark.winreg_mon.RegRecord).
 
     Only the immediate service key is read — sub-subkeys like Parameters or
     Security are ignored for identity purposes.
@@ -329,7 +329,7 @@ def classify_windows_path(path: str) -> str:
 # ---------------------------------------------------------------------------
 # ACL interpretation — the Windows analog of "world-writable" on Linux
 # ---------------------------------------------------------------------------
-# cairn.files.get_acl encodes each ACE as "<type>:<flags>:<mask_hex8>:<principal>"
+# treadmark.files.get_acl encodes each ACE as "<type>:<flags>:<mask_hex8>:<principal>"
 # joined by ';'. ACE type 0 == ACCESS_ALLOWED.
 
 # Broad principals whose write access is a red flag on a program/system file.

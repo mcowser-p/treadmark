@@ -1,4 +1,4 @@
-"""cairn compare: baseline-to-baseline diffs and live-vs-golden compare."""
+"""treadmark compare: baseline-to-baseline diffs and live-vs-golden compare."""
 
 from __future__ import annotations
 

@@ -19,7 +19,7 @@ $Platform = "__PLATFORM__"
 $Region   = "__REGION__"
 $Bucket   = "__BUCKET__"
 $Prefix   = "__RESULTS_PREFIX__"
-$Work     = "C:\cairn-smoke"
+$Work     = "C:\treadmark-smoke"
 $rc       = 99
 $phase    = "bootstrap"
 
@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path "$Work\dist" | Out-Null
 Start-Transcript -Path "$Work\smoke.log" -Force | Out-Null
 
 try {
-    Write-Host ">>> cairn-smoke leg: $Platform"
+    Write-Host ">>> treadmark-smoke leg: $Platform"
 
     $phase = "download"
     Invoke-WebRequest -Uri "__ARTIFACT_URL__" -OutFile "$Work\dist\__ARTIFACT_FILE__" -UseBasicParsing
@@ -71,7 +71,7 @@ try {
         Write-Host "[!] S3 upload failed: $($_.Exception.Message)"
     }
 
-    Write-Host "CAIRN-SMOKE-RESULT: $Platform $rc"
+    Write-Host "TREADMARK-SMOKE-RESULT: $Platform $rc"
     if ("__KEEP__" -ne "1") {
         Stop-Computer -Force
     }

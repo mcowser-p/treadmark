@@ -1,17 +1,17 @@
-# C:\ProgramData\Cairn\cairn.yaml — default config for Windows, edit before
+# C:\ProgramData\Treadmark\treadmark.yaml — default config for Windows, edit before
 # first run.
 #
-# One config, both halves. `cairn all` monitors the FILE surface (paths
+# One config, both halves. `treadmark all` monitors the FILE surface (paths
 # below) AND the REGISTRY surface (registry_keys below, which includes
 # Windows services) from this single file:
-#   cairn all init   --config C:\ProgramData\Cairn\cairn.yaml
-#   cairn all scan   --config C:\ProgramData\Cairn\cairn.yaml
+#   treadmark all init   --config C:\ProgramData\Treadmark\treadmark.yaml
+#   treadmark all scan   --config C:\ProgramData\Treadmark\treadmark.yaml
 #
 # The watch set mirrors the Linux config's philosophy: cover the executable,
 # registry, and persistence surfaces an attacker would touch; exclude the
 # high-churn caches that would drown the signal.
 
-db_path: C:\ProgramData\Cairn\baseline.db
+db_path: C:\ProgramData\Treadmark\baseline.db
 
 paths:
   # Program binaries — where installed software (and dropped payloads) live
@@ -45,7 +45,7 @@ paths:
 
 exclude:
   # --- High-churn OS/state that changes on its own ---
-  - C:\Windows\System32\config\        # live registry hives (use `cairn registry`)
+  - C:\Windows\System32\config\        # live registry hives (use `treadmark registry`)
   - C:\Windows\System32\LogFiles\
   - C:\Windows\System32\catroot2\      # code-signing catalog cache
   - C:\Windows\System32\spool\
@@ -95,7 +95,7 @@ hash_algorithm: sha256
 max_file_size_mb: 500
 
 # ---------------------------------------------------------------------------
-# Registry surface — monitored by `cairn registry` / `cairn all`. These are
+# Registry surface — monitored by `treadmark registry` / `treadmark all`. These are
 # the persistence, service, and auth keys an attacker touches. Declared here
 # (rather than left to the built-in defaults) so you can see and tune them.
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ registry_keys:
 
   # --- Windows services: each service's config (ImagePath, Start, ObjectName
   #     = the run-as identity) lives here. This is how services are monitored,
-  #     and what `cairn footprint` reconstructs into service objects. ---
+  #     and what `treadmark footprint` reconstructs into service objects. ---
   - HKLM\System\CurrentControlSet\Services
 
   # --- Logon / injection hijacks ---
@@ -135,7 +135,7 @@ registry_max_depth: 3
 registry_exclude: []          # substring match against the full key path
 registry_skip_volatile: true  # don't flag perf-counter / volatile churn
 
-# Store gzipped content of small text files in the baseline so `cairn files
+# Store gzipped content of small text files in the baseline so `treadmark files
 # scan` shows unified diffs of changed configs. On Windows the baseline DB is
 # ACL-locked to Administrators/SYSTEM (see the MSI's DataDir permissions).
 # Most Program Files content is binary, so content capture is smaller here
@@ -145,5 +145,5 @@ store_content_max_kb: 256
 
 # Optional report output — see docs/output-formats.md.
 # report:
-#   path: C:\ProgramData\Cairn\reports\latest.json
+#   path: C:\ProgramData\Treadmark\reports\latest.json
 #   format: json

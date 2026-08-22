@@ -10,7 +10,7 @@
 #   version  compute the NEXT release version with no side effects
 #            (semantic-release --print). No tag, no commit, no push.
 #   linux /  build the artifacts, stamping that computed version into the
-#   windows  working tree so .deb/.rpm/.msi + `cairn --version` are correct.
+#   windows  working tree so .deb/.rpm/.msi + `treadmark --version` are correct.
 #   smoke    install the freshly built packages on real distros / via the MSI.
 #   release  ONLY now: semantic-release bumps pyproject, commits, tags, pushes,
 #            and creates the GitHub Release.
@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # No tag exists yet — stamp the computed version into the working tree
-      # so the .deb/.rpm metadata and `cairn --version` report it.
+      # so the .deb/.rpm metadata and `treadmark --version` report it.
       - name: stamp the release version
         run: python scripts/stamp_version.py "${{ needs.version.outputs.version }}"
 
@@ -140,7 +140,7 @@ jobs:
         with:
           name: linux-${{ matrix.arch }}
           path: |
-            dist/cairn-linux-${{ matrix.arch }}
+            dist/treadmark-linux-${{ matrix.arch }}
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
@@ -188,7 +188,7 @@ jobs:
         with:
           name: windows-x86_64
           path: |
-            dist/cairn-windows-x86_64.exe
+            dist/treadmark-windows-x86_64.exe
             dist/*.msi
           if-no-files-found: error
       - name: smoke-test the msi
@@ -231,7 +231,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: install cairn
+      - name: install treadmark
         shell: pwsh
         run: |
           pip install -e .
@@ -291,7 +291,7 @@ jobs:
           # set; PR CI runs only the core web/db set for speed.
           DIST_DIR="$PWD/dist" FOOTPRINT_DIR="$PWD" SMOKE_EXTENDED=1 \
             bash scripts/smoke-test.sh
-      # The captured install footprints (nginx + apache) — what cairn saw
+      # The captured install footprints (nginx + apache) — what treadmark saw
       # each package do. Uploaded even on failure for debugging.
       - uses: actions/upload-artifact@v4
         if: always()

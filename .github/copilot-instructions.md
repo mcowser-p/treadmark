@@ -1,13 +1,13 @@
-# Copilot instructions for cairn
+# Copilot instructions for treadmark
 
 Canonical agent guide: [AGENTS.md](../AGENTS.md) (layout, testing rules,
 invariants). Critical rules:
 
-- cairn is a forensic file-integrity CLI (Linux-first). Core code in
-  `src/cairn/` has **zero hard runtime dependencies** (PyYAML optional) and
+- treadmark is a forensic file-integrity CLI (Linux-first). Core code in
+  `src/treadmark/` has **zero hard runtime dependencies** (PyYAML optional) and
   targets **Python ≥ 3.9**.
 - Verify changes with `pip install -e ".[dev]" && pytest`. Tests call
-  `cairn.__main__.main(argv)` in-process and use JSON configs; the rootfs
+  `treadmark.__main__.main(argv)` in-process and use JSON configs; the rootfs
   fixture is built programmatically (git can't store setuid bits).
 - PR titles must be Conventional Commits — they become the squash commit on
   `main` and **trigger releases** via python-semantic-release: `feat:` →
@@ -21,5 +21,5 @@ invariants). Critical rules:
   substrings on logical paths, not globs.
 - Windows code stays gated behind `IS_WINDOWS` and importable on Linux;
   Windows CI is deliberately disabled. Org metadata (Apache-2.0, mcowser-p,
-  github.com/mcowser-p/cairn) is set — see SETUP.md for the two permanent
+  github.com/mcowser-p/treadmark) is set — see SETUP.md for the two permanent
   values (WiX UpgradeCode, MSI registry path) that must never change.

@@ -1,24 +1,24 @@
-# cairn-aws.yaml — example config for the AWS drift monitor.
+# treadmark-aws.yaml — example config for the AWS drift monitor.
 #
-# ⚠ DORMANT — the `cairn aws` subcommand is currently unwired (scaffold
+# ⚠ DORMANT — the `treadmark aws` subcommand is currently unwired (scaffold
 # pending real-account validation; see docs/cloud-workflow.md). Kept for
 # when that validation lands.
 #
-# Requires the aws extra:   pip install "cairn[aws]"
+# Requires the aws extra:   pip install "treadmark[aws]"
 # Credentials come from the standard boto3 chain (profile below, or
 # AWS_PROFILE / AWS_ACCESS_KEY_* env vars, or an instance/task role).
 # All calls are read-only (Describe*/List*/Get*) — grant the SecurityAudit
 # managed policy, or a minimal custom policy (see docs/cloud-workflow.md).
 #
 # Usage:
-#   cairn aws init  --config cairn-aws.yaml            # capture the baseline
-#   cairn aws scan  --config cairn-aws.yaml --report drift.sarif
-#   cairn aws update --config cairn-aws.yaml           # accept current state
+#   treadmark aws init  --config treadmark-aws.yaml            # capture the baseline
+#   treadmark aws scan  --config treadmark-aws.yaml --report drift.sarif
+#   treadmark aws update --config treadmark-aws.yaml           # accept current state
 
 # One baseline DB per account. Keep it out of world-readable locations — it
 # describes your security posture (it stores NO secrets: env var names only,
 # no key material, no access-key secrets).
-db_path: /var/lib/cairn/aws-baseline.db
+db_path: /var/lib/treadmark/aws-baseline.db
 
 # Named profile from ~/.aws/config. Omit to use the default boto3 chain.
 # aws_profile: prod

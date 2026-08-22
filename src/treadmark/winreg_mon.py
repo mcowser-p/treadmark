@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-cairn.winreg_mon — Windows registry integrity monitoring.
-Companion to cairn.files; stores registry baselines in the same SQLite DB.
+treadmark.winreg_mon — Windows registry integrity monitoring.
+Companion to treadmark.files; stores registry baselines in the same SQLite DB.
 
 Only runs on Windows. On Linux it exits cleanly with a message so you can
 ship the same files to both fleets.
 
 Use via the CLI:
-    cairn registry init   --config C:\\ProgramData\\Cairn\\cairn.yaml
-    cairn registry scan   --config C:\\ProgramData\\Cairn\\cairn.yaml
-    cairn registry update --config C:\\ProgramData\\Cairn\\cairn.yaml
-    cairn registry verify --config C:\\ProgramData\\Cairn\\cairn.yaml
+    treadmark registry init   --config C:\\ProgramData\\Treadmark\\treadmark.yaml
+    treadmark registry scan   --config C:\\ProgramData\\Treadmark\\treadmark.yaml
+    treadmark registry update --config C:\\ProgramData\\Treadmark\\treadmark.yaml
+    treadmark registry verify --config C:\\ProgramData\\Treadmark\\treadmark.yaml
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ DEFAULT_KEYS = [
 
 
 # ---------------------------------------------------------------------------
-# Config (reuses the same YAML/JSON loader pattern as cairn.files)
+# Config (reuses the same YAML/JSON loader pattern as treadmark.files)
 # ---------------------------------------------------------------------------
 
 DEFAULT_CONFIG = {
@@ -296,7 +296,7 @@ def collect_changes(cfg: dict):
     import os
     db_path = cfg["db_path"]
     if not os.path.exists(db_path):
-        raise FileNotFoundError(f"no baseline at {db_path}; run `cairn all init` first")
+        raise FileNotFoundError(f"no baseline at {db_path}; run `treadmark all init` first")
     conn = open_db(db_path)
     try:
         baseline = load_baseline(conn)

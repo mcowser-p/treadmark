@@ -38,7 +38,7 @@ fi
 # the oldest among the supported targets. dpkg-deb comes from EPEL there.
 # ---------------------------------------------------------------------------
 have_artifacts() {
-    ls dist/cairn_*.deb >/dev/null 2>&1 && ls dist/cairn-*.rpm >/dev/null 2>&1
+    ls dist/treadmark_*.deb >/dev/null 2>&1 && ls dist/treadmark-*.rpm >/dev/null 2>&1
 }
 
 if [ "${1:-}" = "--rebuild" ] || ! have_artifacts; then
@@ -54,7 +54,7 @@ if [ "${1:-}" = "--rebuild" ] || ! have_artifacts; then
 else
     echo ">>> reusing existing artifacts in dist/ (pass --rebuild to force)"
 fi
-ls -lh dist/cairn_*.deb dist/cairn-*.rpm
+ls -lh dist/treadmark_*.deb dist/treadmark-*.rpm
 
 # ---------------------------------------------------------------------------
 # Stage 2: run the smoke test inside each target distro.

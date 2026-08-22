@@ -1,4 +1,4 @@
-"""cairn.report — render scan results in multiple formats.
+"""treadmark.report — render scan results in multiple formats.
 
 The scan logic produces a ScanResult; renderers turn that into bytes for
 each supported format. This separation keeps scan code free of formatting
@@ -9,7 +9,7 @@ Supported formats (auto-detected from file extension, or via --format):
     ndjson      one event per line, what every log pipeline wants
     csv         row-per-change with event_type column, opens in Excel
     sarif       Static Analysis Results Interchange Format, for GitHub
-                Security tab integration. Caveat: cairn's events fit the
+                Security tab integration. Caveat: treadmark's events fit the
                 SARIF schema imperfectly; treat the SARIF output as
                 "good enough for ingest" rather than canonical.
     md          Markdown — best human format for tickets, postmortems,
@@ -161,7 +161,7 @@ def _common_envelope(result: ScanResult) -> dict:
         "scanned_at":     result.scanned_at,
         "host":           result.host,
         "db_path":        result.db_path,
-        "tool":           "cairn",
+        "tool":           "treadmark",
         "summary":        result.summary_counts,
         "has_drift":      result.has_drift,
     }
@@ -185,7 +185,7 @@ def _render_ndjson(result: ScanResult) -> str:
     common = {
         "scanned_at": result.scanned_at,
         "host":       result.host,
-        "tool":       "cairn",
+        "tool":       "treadmark",
     }
 
     # Summary line first — log pipelines can use this to reconcile counts.
@@ -274,7 +274,7 @@ def _render_csv(result: ScanResult) -> str:
 # SARIF
 # ---------------------------------------------------------------------------
 # Caveat: SARIF is designed for code-quality findings with line numbers and
-# rules. cairn's events ("file's hash changed") fit imperfectly — we map
+# rules. treadmark's events ("file's hash changed") fit imperfectly — we map
 # each event type to a SARIF rule with severity, and use the file path as
 # the result location. The output is good enough for SARIF-aware ingestion
 # (GitHub Code Scanning, Azure DevOps, Defect Dojo) but isn't going to look
@@ -285,21 +285,21 @@ SARIF_SCHEMA  = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/S
 
 SARIF_RULES = [
     {
-        "id":   "cairn.file.added",
+        "id":   "treadmark.file.added",
         "name": "FileAdded",
         "shortDescription": {"text": "A file appeared that was not in the baseline."},
         "fullDescription":  {"text": "Indicates a new file was created in a monitored path since the baseline was captured. Investigate whether the addition is expected."},
         "defaultConfiguration": {"level": "warning"},
     },
     {
-        "id":   "cairn.file.modified",
+        "id":   "treadmark.file.modified",
         "name": "FileModified",
         "shortDescription": {"text": "A file's content or metadata changed."},
         "fullDescription":  {"text": "The hash, size, permissions, or ownership of a monitored file changed since the baseline."},
         "defaultConfiguration": {"level": "error"},
     },
     {
-        "id":   "cairn.file.deleted",
+        "id":   "treadmark.file.deleted",
         "name": "FileDeleted",
         "shortDescription": {"text": "A file present in the baseline is missing."},
         "fullDescription":  {"text": "A file that existed when the baseline was captured is no longer present in the monitored path."},
@@ -330,7 +330,7 @@ def _render_sarif(result: ScanResult) -> str:
     findings: list[dict] = []
     for rec in result.added:
         findings.append(_sarif_result(
-            "cairn.file.added", "warning",
+            "treadmark.file.added", "warning",
             f"File appeared since baseline: {rec.path} (size {rec.size}, owner {rec.owner})",
             rec.path,
         ))
@@ -340,11 +340,11 @@ def _render_sarif(result: ScanResult) -> str:
         if diff:
             msg += "\n\n" + diff
         findings.append(_sarif_result(
-            "cairn.file.modified", "error", msg, new.path,
+            "treadmark.file.modified", "error", msg, new.path,
         ))
     for rec in result.deleted:
         findings.append(_sarif_result(
-            "cairn.file.deleted", "warning",
+            "treadmark.file.deleted", "warning",
             f"File missing since baseline: {rec.path}",
             rec.path,
         ))
@@ -355,8 +355,8 @@ def _render_sarif(result: ScanResult) -> str:
         "runs": [{
             "tool": {
                 "driver": {
-                    "name":    "cairn",
-                    "informationUri": "https://github.com/mcowser-p/cairn",
+                    "name":    "treadmark",
+                    "informationUri": "https://github.com/mcowser-p/treadmark",
                     "rules":   SARIF_RULES,
                 },
             },
@@ -402,7 +402,7 @@ def _render_plaintext(result: ScanResult) -> str:
     s = result.summary_counts
     lines: list[str] = []
     lines.append("=" * 78)
-    lines.append(f"  Cairn File Integrity Scan Report")
+    lines.append(f"  Treadmark File Integrity Scan Report")
     lines.append("=" * 78)
     lines.append(f"Scanned at: {result.scanned_at}")
     lines.append(f"Host:       {result.host}")
@@ -479,7 +479,7 @@ def _render_markdown(result: ScanResult) -> str:
     s = result.summary_counts
     status_emoji = "🔴" if result.has_drift else "✅"
     lines: list[str] = []
-    lines.append(f"# Cairn Scan Report")
+    lines.append(f"# Treadmark Scan Report")
     lines.append("")
     lines.append(f"**Status:** {status_emoji} {'Drift detected' if result.has_drift else 'Clean'}")
     lines.append(f"**Host:** `{result.host}`  ")
@@ -547,7 +547,7 @@ def _render_markdown(result: ScanResult) -> str:
 
 HTML_HEAD = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Cairn Scan Report — {host}</title>
+<title>Treadmark Scan Report — {host}</title>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
          max-width: 1100px; margin: 2em auto; padding: 0 1em; color: #1f2328;
@@ -598,7 +598,7 @@ def _render_html(result: ScanResult) -> str:
     status_class = "status-drift" if result.has_drift else "status-clean"
     status_text  = "Drift detected" if result.has_drift else "Clean"
 
-    parts.append(f"<h1>Cairn Scan Report</h1>")
+    parts.append(f"<h1>Treadmark Scan Report</h1>")
     parts.append(f'<div class="meta">')
     parts.append(f'<strong>Status:</strong> <span class="{status_class}">{status_text}</span><br>')
     parts.append(f'<strong>Host:</strong> <code>{_h(result.host)}</code><br>')
@@ -723,7 +723,7 @@ def render_terminal(result: ScanResult, *, use_color: Optional[bool] = None) -> 
     lines.append("")
     lines.append(c("┌" + "─" * 76 + "┐", _Color.DIM))
     lines.append(c("│", _Color.DIM)
-                 + f"  Cairn scan @ {result.scanned_at[:19]}".ljust(76)
+                 + f"  Treadmark scan @ {result.scanned_at[:19]}".ljust(76)
                  + c("│", _Color.DIM))
     lines.append(c("│", _Color.DIM)
                  + f"  host: {result.host}   baseline: {result.db_path}".ljust(76)
@@ -782,7 +782,7 @@ def render_terminal(result: ScanResult, *, use_color: Optional[bool] = None) -> 
 
 
 # ---------------------------------------------------------------------------
-# AWS drift reports (cairn aws scan --report ...)
+# AWS drift reports (treadmark aws scan --report ...)
 #
 # A parallel, lightweight result type: AwsRecords have no size/mode/owner, so
 # they get their own renderers instead of being shoehorned through the
@@ -807,21 +807,21 @@ class AwsScanResult:
 
 AWS_SARIF_RULES = [
     {
-        "id":   "cairn.aws.added",
+        "id":   "treadmark.aws.added",
         "name": "AwsResourceAdded",
         "shortDescription": {"text": "An AWS resource appeared that was not in the baseline."},
         "fullDescription":  {"text": "A new resource (IAM principal, security group, bucket policy, trail, key, function...) exists in the account since the baseline was captured. Investigate whether the addition is expected."},
         "defaultConfiguration": {"level": "warning"},
     },
     {
-        "id":   "cairn.aws.modified",
+        "id":   "treadmark.aws.modified",
         "name": "AwsResourceModified",
         "shortDescription": {"text": "An AWS resource's configuration drifted from the baseline."},
         "fullDescription":  {"text": "The canonical configuration of a monitored AWS resource changed since the baseline (policy edit, rule change, logging toggled, rotation disabled...)."},
         "defaultConfiguration": {"level": "error"},
     },
     {
-        "id":   "cairn.aws.deleted",
+        "id":   "treadmark.aws.deleted",
         "name": "AwsResourceDeleted",
         "shortDescription": {"text": "An AWS resource present in the baseline is gone."},
         "fullDescription":  {"text": "A resource that existed when the baseline was captured no longer exists (or is no longer visible to the scanning credentials)."},
@@ -839,7 +839,7 @@ def _render_aws_sarif(result: AwsScanResult) -> str:
     findings: list[dict] = []
     for rec in result.added:
         findings.append(_sarif_result(
-            "cairn.aws.added", "warning",
+            "treadmark.aws.added", "warning",
             f"AWS resource appeared since baseline: {rec.resource_type} "
             f"{rec.arn} (region {rec.region})",
             rec.arn,
@@ -847,14 +847,14 @@ def _render_aws_sarif(result: AwsScanResult) -> str:
     for (old, new) in result.modified:
         keys = ", ".join(_aws_changed_keys(old, new)) or "config"
         findings.append(_sarif_result(
-            "cairn.aws.modified", "error",
+            "treadmark.aws.modified", "error",
             f"AWS resource drifted from baseline: {new.resource_type} "
             f"{new.arn} (region {new.region}) — changed: {keys}",
             new.arn,
         ))
     for rec in result.deleted:
         findings.append(_sarif_result(
-            "cairn.aws.deleted", "warning",
+            "treadmark.aws.deleted", "warning",
             f"AWS resource missing since baseline: {rec.resource_type} "
             f"{rec.arn} (region {rec.region})",
             rec.arn,
@@ -866,8 +866,8 @@ def _render_aws_sarif(result: AwsScanResult) -> str:
         "runs": [{
             "tool": {
                 "driver": {
-                    "name":    "cairn-aws",
-                    "informationUri": "https://github.com/mcowser-p/cairn",
+                    "name":    "treadmark-aws",
+                    "informationUri": "https://github.com/mcowser-p/treadmark",
                     "rules":   AWS_SARIF_RULES,
                 },
             },
@@ -894,7 +894,7 @@ def _aws_record_dict(rec) -> dict:
 
 def _render_aws_json(result: AwsScanResult) -> str:
     doc = {
-        "report_type": "cairn_aws_scan",
+        "report_type": "treadmark_aws_scan",
         "generated_at": result.scanned_at,
         "host": result.host,
         "baseline_db": result.db_path,

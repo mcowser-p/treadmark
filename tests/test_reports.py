@@ -37,7 +37,7 @@ def test_json_report_parses(run_cli, make_config, watch_tree, tmp_path):
     assert rc == 1
 
     payload = json.loads(out_path.read_text())
-    assert payload["tool"] == "cairn"
+    assert payload["tool"] == "treadmark"
     assert payload["has_drift"] is True
     assert payload["summary"]["added"] == 1
     assert payload["summary"]["deleted"] == 1
@@ -58,9 +58,9 @@ def test_sarif_report_parses_and_schema_basics(run_cli, make_config, watch_tree,
     sarif = json.loads(out_path.read_text())
     assert sarif["version"] == "2.1.0"
     run = sarif["runs"][0]
-    assert run["tool"]["driver"]["name"] == "cairn"
+    assert run["tool"]["driver"]["name"] == "treadmark"
     rule_ids = {r["id"] for r in run["tool"]["driver"]["rules"]}
-    assert {"cairn.file.added", "cairn.file.modified", "cairn.file.deleted"} <= rule_ids
+    assert {"treadmark.file.added", "treadmark.file.modified", "treadmark.file.deleted"} <= rule_ids
     assert run["results"], "expected findings for a drifted scan"
     assert all(res["ruleId"] in rule_ids for res in run["results"])
 
@@ -113,4 +113,4 @@ def test_legacy_json_flag(run_cli, make_config, watch_tree):
     _tree, cfg_path, _cfg = _drifted_setup(run_cli, make_config, watch_tree)
     rc, out, _err = run_cli("files", "scan", "-c", cfg_path, "--json")
     assert rc == 1
-    assert json.loads(out)["tool"] == "cairn"
+    assert json.loads(out)["tool"] == "treadmark"

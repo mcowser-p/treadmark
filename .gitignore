@@ -34,12 +34,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# cairn runtime data (in case anyone tests in-tree)
+# treadmark runtime data (in case anyone tests in-tree)
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
-cairn-baseline*.db
+treadmark-baseline*.db
 
 # WiX intermediate
 *.wixobj

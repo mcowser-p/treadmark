@@ -12,7 +12,7 @@ case "$ARCH_RAW" in
     *)       RPM_ARCH="$ARCH_RAW" ;;
 esac
 
-BIN="dist/cairn-linux-${ARCH_RAW}"
+BIN="dist/treadmark-linux-${ARCH_RAW}"
 [ -f "$BIN" ] || { echo "Binary not found: $BIN — run build-binary-linux.sh first"; exit 1; }
 
 # rpmbuild insists on its own directory tree
@@ -22,19 +22,19 @@ mkdir -p "$TOPDIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 # Stage the payload under SOURCES/payload/
 PAYLOAD="$TOPDIR/SOURCES/payload"
-install -Dm755 "$BIN"                                "$PAYLOAD/usr/bin/cairn"
-install -Dm644 packaging/cairn.yaml                  "$PAYLOAD/etc/cairn/cairn.yaml"
-install -Dm644 README.md                             "$PAYLOAD/usr/share/doc/cairn/README.md"
-install -Dm644 docs/golden-baseline-workflow.md      "$PAYLOAD/usr/share/doc/cairn/golden-baseline-workflow.md"
-install -Dm644 docs/output-formats.md                "$PAYLOAD/usr/share/doc/cairn/output-formats.md"
-install -Dm644 docs/forensic-workflow.md             "$PAYLOAD/usr/share/doc/cairn/forensic-workflow.md"
+install -Dm755 "$BIN"                                "$PAYLOAD/usr/bin/treadmark"
+install -Dm644 packaging/treadmark.yaml                  "$PAYLOAD/etc/treadmark/treadmark.yaml"
+install -Dm644 README.md                             "$PAYLOAD/usr/share/doc/treadmark/README.md"
+install -Dm644 docs/golden-baseline-workflow.md      "$PAYLOAD/usr/share/doc/treadmark/golden-baseline-workflow.md"
+install -Dm644 docs/output-formats.md                "$PAYLOAD/usr/share/doc/treadmark/output-formats.md"
+install -Dm644 docs/forensic-workflow.md             "$PAYLOAD/usr/share/doc/treadmark/forensic-workflow.md"
 
-cp packaging/cairn.spec "$TOPDIR/SPECS/cairn.spec"
+cp packaging/treadmark.spec "$TOPDIR/SPECS/treadmark.spec"
 
 CHANGELOG_DATE=$(LC_ALL=C date '+%a %b %d %Y')
 
 # %dist is pinned empty so the artifact keeps its distro-neutral name
-# (cairn-X.Y.Z-1.<arch>.rpm) regardless of build host. The binary targets a
+# (treadmark-X.Y.Z-1.<arch>.rpm) regardless of build host. The binary targets a
 # glibc FLOOR (built on EL9 — see build-binary-linux.sh), not one distro;
 # a .el9 tag would misread as "EL9-only".
 rpmbuild \
@@ -44,7 +44,7 @@ rpmbuild \
     --define "_changelog_date $CHANGELOG_DATE" \
     --define "dist %{nil}" \
     --target "$RPM_ARCH" \
-    -bb "$TOPDIR/SPECS/cairn.spec"
+    -bb "$TOPDIR/SPECS/treadmark.spec"
 
 # rpmbuild's exact filename varies by distro (the %{?dist} tag), so just glob
 OUT_SRC=$(ls "$TOPDIR/RPMS/$RPM_ARCH/"*.rpm | head -1)

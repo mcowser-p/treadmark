@@ -1,6 +1,6 @@
-"""Shared fixtures for the cairn test suite.
+"""Shared fixtures for the treadmark test suite.
 
-Tests invoke the real CLI entry point (cairn.__main__.main) in-process: it
+Tests invoke the real CLI entry point (treadmark.__main__.main) in-process: it
 takes an argv list and returns an exit code without calling sys.exit, which
 gives us direct assertions, captured output, and coverage. Two subprocess
 smoke tests in test_cli_cycle.py validate the packaged entry point.
@@ -28,8 +28,8 @@ if str(SRC_DIR) not in sys.path:
 
 @pytest.fixture
 def run_cli(capsys):
-    """Invoke the cairn CLI in-process. Returns (exit_code, stdout, stderr)."""
-    from cairn.__main__ import main
+    """Invoke the treadmark CLI in-process. Returns (exit_code, stdout, stderr)."""
+    from treadmark.__main__ import main
 
     def _run(*argv: str):
         rc = main(list(argv))

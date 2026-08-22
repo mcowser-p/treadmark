@@ -12,7 +12,7 @@ case "$ARCH_RAW" in
     *)       DEB_ARCH="$ARCH_RAW" ;;
 esac
 
-BIN="dist/cairn-linux-${ARCH_RAW}"
+BIN="dist/treadmark-linux-${ARCH_RAW}"
 [ -f "$BIN" ] || { echo "Binary not found: $BIN — run build-binary-linux.sh first"; exit 1; }
 
 STAGE=$(mktemp -d)
@@ -21,15 +21,15 @@ trap 'rm -rf "$STAGE"' EXIT
 # ---------------------------------------------------------------------------
 # FHS-compliant payload layout
 # ---------------------------------------------------------------------------
-install -Dm755 "$BIN"                                "$STAGE/usr/bin/cairn"
-install -Dm644 packaging/cairn.yaml                  "$STAGE/etc/cairn/cairn.yaml"
+install -Dm755 "$BIN"                                "$STAGE/usr/bin/treadmark"
+install -Dm644 packaging/treadmark.yaml                  "$STAGE/etc/treadmark/treadmark.yaml"
 
 # Example scheduling units shipped as DOCS, not active config — operator
 # decides whether to enable scheduling and how.
-install -Dm644 README.md                             "$STAGE/usr/share/doc/cairn/README.md"
-install -Dm644 docs/golden-baseline-workflow.md      "$STAGE/usr/share/doc/cairn/golden-baseline-workflow.md"
-install -Dm644 docs/output-formats.md                "$STAGE/usr/share/doc/cairn/output-formats.md"
-install -Dm644 docs/forensic-workflow.md             "$STAGE/usr/share/doc/cairn/forensic-workflow.md"
+install -Dm644 README.md                             "$STAGE/usr/share/doc/treadmark/README.md"
+install -Dm644 docs/golden-baseline-workflow.md      "$STAGE/usr/share/doc/treadmark/golden-baseline-workflow.md"
+install -Dm644 docs/output-formats.md                "$STAGE/usr/share/doc/treadmark/output-formats.md"
+install -Dm644 docs/forensic-workflow.md             "$STAGE/usr/share/doc/treadmark/forensic-workflow.md"
 
 # ---------------------------------------------------------------------------
 # DEBIAN/control + maintainer scripts
@@ -37,29 +37,29 @@ install -Dm644 docs/forensic-workflow.md             "$STAGE/usr/share/doc/cairn
 mkdir -p "$STAGE/DEBIAN"
 
 cat > "$STAGE/DEBIAN/control" <<EOF
-Package: cairn
+Package: treadmark
 Version: $VERSION
 Section: admin
 Priority: optional
 Architecture: $DEB_ARCH
 Maintainer: mcowser-p <mcowser-p@users.noreply.github.com>
-Homepage: https://github.com/mcowser-p/cairn
+Homepage: https://github.com/mcowser-p/treadmark
 Description: Cross-platform File Integrity Monitor
- A cairn is a stack of stones marking known-good ground. This is the same
+ A treadmark is a stack of stones marking known-good ground. This is the same
  idea for files: build a baseline once, then verify nothing has been
  disturbed on subsequent scans. AIDE-style, single binary, no agent required.
 EOF
 
-# /etc/cairn/cairn.yaml is a conffile — dpkg won't overwrite operator changes
+# /etc/treadmark/treadmark.yaml is a conffile — dpkg won't overwrite operator changes
 # on upgrade.
-echo "/etc/cairn/cairn.yaml" > "$STAGE/DEBIAN/conffiles"
+echo "/etc/treadmark/treadmark.yaml" > "$STAGE/DEBIAN/conffiles"
 
 install -m755 packaging/postinstall.sh "$STAGE/DEBIAN/postinst"
 
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-OUT="dist/cairn_${VERSION}_${DEB_ARCH}.deb"
+OUT="dist/treadmark_${VERSION}_${DEB_ARCH}.deb"
 dpkg-deb --build --root-owner-group "$STAGE" "$OUT"
 echo "built: $OUT"
 dpkg-deb --info "$OUT" | grep -E '^ (Package|Version|Architecture|Description)'

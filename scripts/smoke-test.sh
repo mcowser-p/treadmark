@@ -14,7 +14,7 @@
 set -euo pipefail
 
 DIST_DIR="${DIST_DIR:-/dist}"
-CFG=/etc/cairn/cairn.yaml
+CFG=/etc/treadmark/treadmark.yaml
 
 step() { printf '\n>>> %s\n' "$*"; }
 fail() { printf '[SMOKE FAIL] %s\n' "$*" >&2; exit 1; }
@@ -27,14 +27,14 @@ step "smoke test on: ${PRETTY_NAME:-unknown} ($(uname -m))"
 # ---------------------------------------------------------------------------
 if command -v apt-get >/dev/null 2>&1; then
     DEB_ARCH=$(dpkg --print-architecture)
-    pkg=$(ls "$DIST_DIR"/cairn_*_"${DEB_ARCH}".deb 2>/dev/null | head -n1) \
+    pkg=$(ls "$DIST_DIR"/treadmark_*_"${DEB_ARCH}".deb 2>/dev/null | head -n1) \
         || fail "no .deb for ${DEB_ARCH} in $DIST_DIR"
     step "installing $pkg"
     # No Depends declared today; fall back to apt -f if that ever changes.
     dpkg -i "$pkg" || { apt-get update -qq && apt-get install -qq -y -f; }
 elif command -v dnf >/dev/null 2>&1; then
     RPM_ARCH=$(uname -m)
-    pkg=$(ls "$DIST_DIR"/cairn-*."${RPM_ARCH}".rpm 2>/dev/null | head -n1) \
+    pkg=$(ls "$DIST_DIR"/treadmark-*."${RPM_ARCH}".rpm 2>/dev/null | head -n1) \
         || fail "no .rpm for ${RPM_ARCH} in $DIST_DIR"
     step "installing $pkg"
     dnf install -qy "$pkg" || rpm -i "$pkg"
@@ -45,34 +45,34 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Binary runs, packaged layout is right
 # ---------------------------------------------------------------------------
-step "cairn --version"
-cairn --version || fail "binary does not execute (glibc/arch mismatch?)"
+step "treadmark --version"
+treadmark --version || fail "binary does not execute (glibc/arch mismatch?)"
 
 step "packaged layout"
 [ -f "$CFG" ] || fail "shipped config missing: $CFG"
-[ -d /var/lib/cairn ] || fail "/var/lib/cairn missing (postinstall contract)"
-perms=$(stat -c '%a' /var/lib/cairn)
-[ "$perms" = "700" ] || fail "/var/lib/cairn is mode $perms, expected 700"
+[ -d /var/lib/treadmark ] || fail "/var/lib/treadmark missing (postinstall contract)"
+perms=$(stat -c '%a' /var/lib/treadmark)
+[ "$perms" = "700" ] || fail "/var/lib/treadmark is mode $perms, expected 700"
 
 # ---------------------------------------------------------------------------
 # 3. Baseline cycle with the shipped default config
 # ---------------------------------------------------------------------------
 step "init baseline (shipped config — exercises bundled PyYAML)"
-cairn files init --config "$CFG" || fail "init failed"
+treadmark files init --config "$CFG" || fail "init failed"
 
 step "clean scan expects exit 0"
-rc=0; cairn files scan --config "$CFG" >/tmp/scan-clean.out 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$CFG" >/tmp/scan-clean.out 2>&1 || rc=$?
 [ "$rc" -eq 0 ] || { cat /tmp/scan-clean.out; fail "clean scan exited $rc"; }
 
 step "plant drift (new file + /etc/hosts edit)"
-echo "smoke-test marker" > /etc/cairn-smoke-drift.conf
+echo "smoke-test marker" > /etc/treadmark-smoke-drift.conf
 echo "203.0.113.99 smoke-test.invalid" >> /etc/hosts
 
 step "drift scan expects exit 1 and both paths reported"
-rc=0; cairn files scan --config "$CFG" --report /tmp/smoke.json >/tmp/scan-drift.out 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$CFG" --report /tmp/smoke.json >/tmp/scan-drift.out 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || { cat /tmp/scan-drift.out; fail "drift scan exited $rc, expected 1"; }
 grep -q '"has_drift": true' /tmp/smoke.json || fail "report lacks has_drift=true"
-grep -q '/etc/cairn-smoke-drift.conf' /tmp/smoke.json || fail "planted file not reported"
+grep -q '/etc/treadmark-smoke-drift.conf' /tmp/smoke.json || fail "planted file not reported"
 grep -q '/etc/hosts' /tmp/smoke.json \
     || fail "/etc/hosts edit not reported — is the exclude list too aggressive?"
 
@@ -81,15 +81,15 @@ step "accept the drift, rescan expects exit 0"
 # planting a file updates the parent dir's mtime, and if init and the
 # plant straddle an integer second, the dir shows as modified too.
 # (--accept on a directory covers everything beneath it.)
-rc=0; cairn files update --config "$CFG" \
-    --accept /etc/cairn-smoke-drift.conf --accept /etc/hosts \
+rc=0; treadmark files update --config "$CFG" \
+    --accept /etc/treadmark-smoke-drift.conf --accept /etc/hosts \
     --accept /etc >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "update run exited $rc (expected 1: it reports the drift it accepts)"
-rc=0; cairn files scan --config "$CFG" >/tmp/scan-after.out 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$CFG" >/tmp/scan-after.out 2>&1 || rc=$?
 [ "$rc" -eq 0 ] || { cat /tmp/scan-after.out; fail "post-accept scan exited $rc"; }
 
 step "baseline provenance"
-cairn baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline info broken"
+treadmark baseline info --config "$CFG" | grep -q "DB SHA-256" || fail "baseline info broken"
 
 # ---------------------------------------------------------------------------
 # 3b. Drift detection in EVERY watched top folder — one marker per top dir
@@ -107,14 +107,14 @@ for d in /etc /bin /sbin /usr/bin /usr/sbin \
         echo "    (skipping $d — not present on this target)"
         continue
     fi
-    marker="$d/cairn-smoke-marker-$(echo "${d#/}" | tr '/' '-')"
+    marker="$d/treadmark-smoke-marker-$(echo "${d#/}" | tr '/' '-')"
     echo "smoke marker" > "$marker"
     planted="$planted $marker"
 done
 [ -n "$planted" ] || fail "no top dirs available to plant markers in"
 
 step "per-top-folder drift: scan reports every marker"
-rc=0; cairn files scan --config "$CFG" --report /tmp/topdirs.json >/dev/null 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$CFG" --report /tmp/topdirs.json >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "top-folder drift scan exited $rc, expected 1"
 for p in $planted; do
     grep -q "\"$p\"" /tmp/topdirs.json \
@@ -123,9 +123,9 @@ done
 echo "    all markers reported:$planted"
 
 step "per-top-folder drift: accept-all, rescan expects exit 0"
-rc=0; cairn files update --config "$CFG" --accept-all >/dev/null 2>&1 || rc=$?
+rc=0; treadmark files update --config "$CFG" --accept-all >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "accept-all update exited $rc (expected 1: it reports what it accepts)"
-rc=0; cairn files scan --config "$CFG" >/tmp/scan-topdirs.out 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$CFG" >/tmp/scan-topdirs.out 2>&1 || rc=$?
 [ "$rc" -eq 0 ] || { cat /tmp/scan-topdirs.out; fail "post-accept-all scan exited $rc"; }
 
 # ---------------------------------------------------------------------------
@@ -137,29 +137,29 @@ step "new top folder: baseline a watched path that doesn't exist yet"
 NT_CFG=/tmp/newtop-config.json
 cat > "$NT_CFG" <<'EOF'
 {
-  "db_path": "/var/lib/cairn/newtop-baseline.db",
-  "paths": ["/cairn-smoke-newtop"],
+  "db_path": "/var/lib/treadmark/newtop-baseline.db",
+  "paths": ["/treadmark-smoke-newtop"],
   "store_content": true
 }
 EOF
-cairn files init --config "$NT_CFG" >/dev/null 2>&1 || fail "newtop baseline init failed"
+treadmark files init --config "$NT_CFG" >/dev/null 2>&1 || fail "newtop baseline init failed"
 
-step "new top folder: create /cairn-smoke-newtop with a nested tree"
-mkdir -p /cairn-smoke-newtop/nested/deeper
-echo "top-level file"  > /cairn-smoke-newtop/app.conf
-echo "nested payload"  > /cairn-smoke-newtop/nested/deeper/data.bin
-printf '\x7fELF fake' > /cairn-smoke-newtop/nested/tool
-chmod 755 /cairn-smoke-newtop/nested/tool
+step "new top folder: create /treadmark-smoke-newtop with a nested tree"
+mkdir -p /treadmark-smoke-newtop/nested/deeper
+echo "top-level file"  > /treadmark-smoke-newtop/app.conf
+echo "nested payload"  > /treadmark-smoke-newtop/nested/deeper/data.bin
+printf '\x7fELF fake' > /treadmark-smoke-newtop/nested/tool
+chmod 755 /treadmark-smoke-newtop/nested/tool
 
 step "new top folder: scan captures the entire tree"
-rc=0; cairn files scan --config "$NT_CFG" --report /tmp/newtop.json >/dev/null 2>&1 || rc=$?
+rc=0; treadmark files scan --config "$NT_CFG" --report /tmp/newtop.json >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 1 ] || fail "newtop scan exited $rc, expected 1"
-for p in /cairn-smoke-newtop \
-         /cairn-smoke-newtop/app.conf \
-         /cairn-smoke-newtop/nested \
-         /cairn-smoke-newtop/nested/tool \
-         /cairn-smoke-newtop/nested/deeper \
-         /cairn-smoke-newtop/nested/deeper/data.bin; do
+for p in /treadmark-smoke-newtop \
+         /treadmark-smoke-newtop/app.conf \
+         /treadmark-smoke-newtop/nested \
+         /treadmark-smoke-newtop/nested/tool \
+         /treadmark-smoke-newtop/nested/deeper \
+         /treadmark-smoke-newtop/nested/deeper/data.bin; do
     grep -q "\"$p\"" /tmp/newtop.json \
         || fail "new top folder capture missed: $p"
 done
@@ -174,7 +174,7 @@ if [ "${SMOKE_FOOTPRINT:-1}" = "1" ]; then
 
 # ---------------------------------------------------------------------------
 # 4. Footprint capture of real package installs — the core use case.
-# Fresh baseline → install a package from the distro repos → `cairn
+# Fresh baseline → install a package from the distro repos → `treadmark
 # footprint` must surface its semantic objects. Covers the common web
 # servers and databases; package names, units, binaries, config trees,
 # and created service accounts all differ across distro families —
@@ -189,7 +189,7 @@ step "footprint: write footprint-tuned config"
 FP_CFG=/tmp/footprint-config.json
 cat > "$FP_CFG" <<'EOF'
 {
-  "db_path": "/var/lib/cairn/footprint-baseline.db",
+  "db_path": "/var/lib/treadmark/footprint-baseline.db",
   "paths": ["/etc", "/usr/bin", "/usr/sbin", "/usr/libexec",
             "/usr/lib/systemd", "/usr/lib/postgresql", "/var/spool/cron"],
   "exclude": ["/etc/ld.so.cache", "/etc/mtab", "/etc/resolv.conf",
@@ -218,7 +218,7 @@ capture_footprint() {
     step "footprint($app): fresh baseline"
     # Keep the output: a baseline that exits non-zero must name the offending
     # path/exception in the log, not vanish behind /dev/null.
-    cairn files init --config "$FP_CFG" --force >"/tmp/init-$app.out" 2>&1 \
+    treadmark files init --config "$FP_CFG" --force >"/tmp/init-$app.out" 2>&1 \
         || { cat "/tmp/init-$app.out"; fail "footprint($app): baseline init failed"; }
 
     # A package can arrive early as a dependency of a previous capture
@@ -242,7 +242,7 @@ capture_footprint() {
     fi
 
     step "footprint($app): capture and verify"
-    rc=0; cairn footprint --config "$FP_CFG" --app "$app" \
+    rc=0; treadmark footprint --config "$FP_CFG" --app "$app" \
         --report "$json" >"/tmp/footprint-$app.out" 2>&1 || rc=$?
     [ "$rc" -eq 1 ] || { cat "/tmp/footprint-$app.out";
         fail "footprint($app) exited $rc, expected 1 (changes present)"; }

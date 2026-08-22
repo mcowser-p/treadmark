@@ -1,9 +1,9 @@
 ---
 name: release
-description: Cut, verify, or debug a cairn release. Use when asked to release a new version, check why a release didn't happen, fix a failed release build, or explain the release pipeline. Releases are fully automated from conventional commits — there is no manual tag/version step.
+description: Cut, verify, or debug a treadmark release. Use when asked to release a new version, check why a release didn't happen, fix a failed release build, or explain the release pipeline. Releases are fully automated from conventional commits — there is no manual tag/version step.
 ---
 
-# Releasing cairn
+# Releasing treadmark
 
 Releases are cut by `.github/workflows/release.yml` on every push to `main`.
 There is **no manual step**: no tags, no version bumps, no GitHub Release
@@ -33,9 +33,9 @@ gh run list --workflow=release.yml --limit 3     # pipeline status
 gh release view vX.Y.Z                            # artifacts attached?
 ```
 
-Expect on the release: `.whl`, `cairn-linux-x86_64`, `cairn-linux-aarch64`,
+Expect on the release: `.whl`, `treadmark-linux-x86_64`, `treadmark-linux-aarch64`,
 `.deb`, `.rpm`, `SHA256SUMS`. Ideal smoke test: install the .deb in a
-container, run `cairn --version` and an init/scan cycle.
+container, run `treadmark --version` and an init/scan cycle.
 
 ## Debugging
 

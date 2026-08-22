@@ -1,4 +1,4 @@
-"""cairn.k8smon — Kubernetes cluster-configuration integrity monitor. SCAFFOLD.
+"""treadmark.k8smon — Kubernetes cluster-configuration integrity monitor. SCAFFOLD.
 
 ⚠ UNTESTED SCAFFOLD — structured after awsmon/gcpmon but NOT yet exercised
 against a real cluster. Deliberately unwired (no CLI subcommand, no active
@@ -278,7 +278,7 @@ def _require_sdk(quiet: bool = False) -> bool:
         return True
     if not quiet:
         print('[!] kubernetes client not installed; run:  '
-              'pip install "cairn[k8s]"', file=sys.stderr)
+              'pip install "treadmark[k8s]"', file=sys.stderr)
     return False
 
 

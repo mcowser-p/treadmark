@@ -16,24 +16,24 @@ Compare every server in your fleet against a known-good reference baseline. This
 - Hosts with hostname-specific configs (`/etc/hostname`, TLS certs, machine IDs)
 - Mixed OS versions (RHEL 8 vs RHEL 9 will show kernel/lib drift constantly)
 
-For bad-fit hosts use the per-host baseline workflow (`cairn files init` / `cairn files scan`) instead.
+For bad-fit hosts use the per-host baseline workflow (`treadmark files init` / `treadmark files scan`) instead.
 
 ## The two modes
 
-### `cairn compare against` — drift check on a live host
+### `treadmark compare against` — drift check on a live host
 
 Walks the local filesystem and reports differences against a reference DB. Exit 0 = matches golden, exit 1 = drift.
 
 ```
-cairn compare against /opt/cairn/golden-web.db --config /etc/cairn/cairn.yaml
+treadmark compare against /opt/treadmark/golden-web.db --config /etc/treadmark/treadmark.yaml
 ```
 
-### `cairn compare baselines` — pure database diff
+### `treadmark compare baselines` — pure database diff
 
 Diffs two DB files. No filesystem walk, no hashing, fast.
 
 ```
-cairn compare baselines /opt/cairn/golden-web.db /var/lib/cairn/baseline.db
+treadmark compare baselines /opt/treadmark/golden-web.db /var/lib/treadmark/baseline.db
 ```
 
 Useful for:
@@ -47,8 +47,8 @@ Useful for:
 
 ```bash
 # On a freshly-provisioned, hardened, known-clean machine:
-cairn files init --config /etc/cairn/cairn.yaml
-cp /var/lib/cairn/baseline.db /opt/cairn/golden-web-v1.0.db
+treadmark files init --config /etc/treadmark/treadmark.yaml
+cp /var/lib/treadmark/baseline.db /opt/treadmark/golden-web-v1.0.db
 ```
 
 Bake the version into the filename. Every config change, package update, or intentional deploy means a new golden baseline.
@@ -56,8 +56,8 @@ Bake the version into the filename. Every config change, package update, or inte
 ### 2. Sign and distribute it
 
 ```bash
-sha256sum /opt/cairn/golden-web-v1.0.db > golden-web-v1.0.db.sha256
-gpg --detach-sign /opt/cairn/golden-web-v1.0.db
+sha256sum /opt/treadmark/golden-web-v1.0.db > golden-web-v1.0.db.sha256
+gpg --detach-sign /opt/treadmark/golden-web-v1.0.db
 ```
 
 Push to your config-management system (Ansible, Puppet, Chef, Salt) along with the .sig and .sha256. **Do not push it from the same channel that pushes your binaries** — if both are compromised, file integrity monitoring is theater.
@@ -68,13 +68,13 @@ Cron / systemd timer / scheduled task on each server:
 
 ```bash
 # Verify the golden baseline hasn't been tampered with in transit
-sha256sum -c /opt/cairn/golden-web-v1.0.db.sha256
-gpg --verify /opt/cairn/golden-web-v1.0.db.sig
+sha256sum -c /opt/treadmark/golden-web-v1.0.db.sha256
+gpg --verify /opt/treadmark/golden-web-v1.0.db.sig
 
 # Compare and forward to SIEM
-cairn compare against /opt/cairn/golden-web-v1.0.db \
-    --config /etc/cairn/cairn.yaml \
-    --json | logger -t cairn-drift
+treadmark compare against /opt/treadmark/golden-web-v1.0.db \
+    --config /etc/treadmark/treadmark.yaml \
+    --json | logger -t treadmark-drift
 ```
 
 Exit code 1 means drift. Wire it into your alerting.
@@ -84,12 +84,12 @@ Exit code 1 means drift. Wire it into your alerting.
 When a host alerts, the JSON shows you exactly what changed. Three categories:
 
 - **Expected drift** — package updates, log rotation, app deploys. Update the golden baseline (step 1) and roll out v1.1.
-- **Acceptable host-specific drift** — hostname, IP-bound certs, machine-id. Add these to the `exclude:` list in `cairn.yaml`.
-- **Unexpected drift** — investigate immediately. This is what cairn is for.
+- **Acceptable host-specific drift** — hostname, IP-bound certs, machine-id. Add these to the `exclude:` list in `treadmark.yaml`.
+- **Unexpected drift** — investigate immediately. This is what treadmark is for.
 
 ## Handling host-specific files
 
-Some files legitimately differ per-host. The shipped `/etc/cairn/cairn.yaml`
+Some files legitimately differ per-host. The shipped `/etc/treadmark/treadmark.yaml`
 already contains this list as a commented-out **"Golden-baseline / cross-host
 compares"** block at the bottom of its `exclude:` section — uncomment it when
 the config feeds cross-host compares. (It ships commented out because these
@@ -120,14 +120,14 @@ exclude:
   - \Windows\System32\spp\store\  # activation tokens
 ```
 
-Tune iteratively: run `cairn compare against` on a known-clean host, anything flagged that *should* differ goes into `exclude:`, repeat until clean.
+Tune iteratively: run `treadmark compare against` on a known-clean host, anything flagged that *should* differ goes into `exclude:`, repeat until clean.
 
 ## Versioning the golden baseline
 
 Treat golden baselines like any other artifact. Recommended:
 
 ```
-/opt/cairn/baselines/
+/opt/treadmark/baselines/
 ├── web-debian12-v2026.05.04.db        # filename = role-os-date
 ├── web-debian12-v2026.05.04.db.sig
 ├── web-debian12-v2026.05.04.db.sha256
@@ -138,21 +138,21 @@ Treat golden baselines like any other artifact. Recommended:
 A small `current` symlink (or registry value on Windows) lets the cron job always reach for the right one without hard-coding paths:
 
 ```bash
-cairn compare against /opt/cairn/baselines/current.db --config /etc/cairn/cairn.yaml
+treadmark compare against /opt/treadmark/baselines/current.db --config /etc/treadmark/treadmark.yaml
 ```
 
 ## What about hosts that need their OWN baseline too?
 
-Both workflows can coexist. A host can have a per-host baseline (`cairn files scan` against its local `baseline.db`) AND be checked against the golden. The per-host baseline catches "did anything change since yesterday?", the golden catches "is this host still consistent with its peers?".
+Both workflows can coexist. A host can have a per-host baseline (`treadmark files scan` against its local `baseline.db`) AND be checked against the golden. The per-host baseline catches "did anything change since yesterday?", the golden catches "is this host still consistent with its peers?".
 
 Run them in sequence:
 
 ```bash
-cairn files verify --config /etc/cairn/cairn.yaml \
-    || logger -t cairn-local "host changed since last update"
+treadmark files verify --config /etc/treadmark/treadmark.yaml \
+    || logger -t treadmark-local "host changed since last update"
 
-cairn compare against /opt/cairn/baselines/current.db --config /etc/cairn/cairn.yaml \
-    || logger -t cairn-drift "host diverges from golden"
+treadmark compare against /opt/treadmark/baselines/current.db --config /etc/treadmark/treadmark.yaml \
+    || logger -t treadmark-drift "host diverges from golden"
 ```
 
 ## Compliance angle

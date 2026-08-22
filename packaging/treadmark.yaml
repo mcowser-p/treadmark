@@ -1,4 +1,4 @@
-# /etc/cairn/cairn.yaml — default config, edit before first run
+# /etc/treadmark/treadmark.yaml — default config, edit before first run
 #
 # The exclude list below is tuned for the forensic single-host default:
 # suppress files that churn on their own (package-manager bookkeeping,
@@ -8,8 +8,8 @@
 # NOTE: if you tighten this list on a host that already has a baseline,
 # the next scan reports newly-excluded paths as *deleted* once (they are in
 # the baseline but no longer walked). Accept them one time with:
-#   cairn files update --accept <path> ...
-db_path: /var/lib/cairn/baseline.db
+#   treadmark files update --accept <path> ...
+db_path: /var/lib/treadmark/baseline.db
 
 paths:
   - /etc
@@ -99,7 +99,7 @@ exclude:
   #     /etc/cloud/              user-data persistence is an attack vector
 
   # --- Golden-baseline / cross-host compares: uncomment this block when
-  #     this config feeds `cairn compare against` across machines or OS
+  #     this config feeds `treadmark compare against` across machines or OS
   #     images. These are per-host identity files — legitimate forensic
   #     watch targets on a single host, pure noise when diffing host A
   #     against golden image B. See docs/golden-baseline-workflow.md. ---
@@ -121,7 +121,7 @@ hash_algorithm: sha256
 max_file_size_mb: 500
 
 # Store gzipped content of small text files in the baseline. When enabled,
-# `cairn files scan` shows unified diffs for changed config files instead
+# `treadmark files scan` shows unified diffs for changed config files instead
 # of just "sha256 changed" — invaluable for forensic investigation.
 #
 # Caveat: the baseline DB then contains snapshots of monitored files. The
@@ -133,11 +133,11 @@ max_file_size_mb: 500
 store_content: true
 store_content_max_kb: 256   # don't store text files larger than this
 
-# Optional report output. If `path` is set, every `cairn files scan` writes
+# Optional report output. If `path` is set, every `treadmark files scan` writes
 # a report file in addition to printing terminal output. Format is auto-
 # detected from the extension (json/ndjson/csv/sarif/md/html/txt) or override
 # with `format`. The CLI flags --report and --format override these.
 #
 # report:
-#   path: /var/lib/cairn/reports/latest.json
+#   path: /var/lib/treadmark/reports/latest.json
 #   format: json     # optional; inferred from path extension

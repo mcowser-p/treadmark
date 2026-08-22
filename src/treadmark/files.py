@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-cairn.files — Cross-platform filesystem integrity monitor.
+treadmark.files — Cross-platform filesystem integrity monitor.
 
 Works on Linux and Windows. Creates a baseline snapshot of files (hash +
 metadata) and reports added / modified / deleted / permission-changed files
 on subsequent scans.
 
 Use via the CLI:
-    cairn files init   --config /etc/cairn/cairn.yaml
-    cairn files scan   --config /etc/cairn/cairn.yaml
-    cairn files update --config /etc/cairn/cairn.yaml
-    cairn files verify --config /etc/cairn/cairn.yaml
+    treadmark files init   --config /etc/treadmark/treadmark.yaml
+    treadmark files scan   --config /etc/treadmark/treadmark.yaml
+    treadmark files update --config /etc/treadmark/treadmark.yaml
+    treadmark files verify --config /etc/treadmark/treadmark.yaml
 
-The baseline is stored in a SQLite DB (default: /var/lib/cairn/baseline.db).
+The baseline is stored in a SQLite DB (default: /var/lib/treadmark/baseline.db).
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ class FileRecord:
     error: Optional[str]    # populated if the file couldn't be hashed/read
     # Optional gzipped content of the file at baseline time. Captured only
     # for text files under `store_content_max_kb` size, controlled by config.
-    # Lets `cairn files scan` show line-level diffs for changed config files.
+    # Lets `treadmark files scan` show line-level diffs for changed config files.
     content_gz: Optional[bytes] = None
     # The path as it exists on the scanning machine. Differs from `path` only
     # when root_prefix is set (mounted image, container rootfs, chroot).
@@ -137,7 +137,7 @@ def hash_file(path: str, algorithm: str = "sha256", chunk: int = 1024 * 1024) ->
 # Text detection and content capture for diff display
 # ---------------------------------------------------------------------------
 # We optionally store the gzipped content of small text files in the baseline
-# so that `cairn files scan` can render unified diffs for changed configs
+# so that `treadmark files scan` can render unified diffs for changed configs
 # (rather than just "sha256 changed"). This is invaluable for forensic
 # investigation but adds two real concerns:
 #
@@ -887,7 +887,7 @@ def cmd_scan(cfg: dict, json_out: bool = False,
                 # Still print a brief status to the terminal so operators know
                 # the scan ran and where the report went.
                 drift = "DRIFT" if result.has_drift else "clean"
-                print(f"[{drift}] cairn scan complete — "
+                print(f"[{drift}] treadmark scan complete — "
                       f"+{len(added)} ~{len(modified)} -{len(deleted)} "
                       f"→ {final_path} ({actual_fmt})")
     elif json_out:
@@ -923,7 +923,7 @@ def cmd_update(cfg: dict, accept: list[str], dry_run: bool = False) -> int:
     if not accept:
         print("[!] `update` requires --accept PATH, --accept-from FILE, "
               "or --accept-all", file=sys.stderr)
-        print("    cairn does not silently accept all changes — that would",
+        print("    treadmark does not silently accept all changes — that would",
               file=sys.stderr)
         print("    erase the forensic record of what changed.", file=sys.stderr)
         return 2
@@ -988,7 +988,7 @@ def cmd_baseline_info(cfg: dict, json_out: bool = False) -> int:
 
     print()
     print("=" * 78)
-    print("  Cairn Baseline Provenance")
+    print("  Treadmark Baseline Provenance")
     print("=" * 78)
     print(f"DB path:              {info['db_path']}")
     print(f"DB size:              {info['db_size_bytes']:,} bytes")
@@ -1025,7 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Cross-platform File Integrity Monitor")
     p.add_argument("command", choices=["init", "scan", "update", "verify"],
                    help="init: build baseline. scan: report drift. update: accept changes. verify: silent scan with exit code.")
-    p.add_argument("--config", "-c", help="Path to cairn config (.yaml or .json)")
+    p.add_argument("--config", "-c", help="Path to treadmark config (.yaml or .json)")
     p.add_argument("--json", action="store_true", help="Emit scan output as JSON")
     p.add_argument("--force", action="store_true", help="Overwrite existing baseline on init")
     args = p.parse_args(argv)

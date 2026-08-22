@@ -1,4 +1,4 @@
-"""cairn.awsmon — pure tests: no boto3, no network, no credentials.
+"""treadmark.awsmon — pure tests: no boto3, no network, no credentials.
 
 Drivers take a client object, so fake clients returning canned dict payloads
 exercise the whole path. The client factory is injected into cmd_init/cmd_scan.
@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 
-from cairn import awsmon
-from cairn import report as report_mod
+from treadmark import awsmon
+from treadmark import report as report_mod
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ def test_aws_sarif_render_is_valid_and_uses_arn_uri():
     assert doc["version"] == "2.1.0"
     results = doc["runs"][0]["results"]
     ids = {r["ruleId"] for r in results}
-    assert ids == {"cairn.aws.added", "cairn.aws.modified"}
+    assert ids == {"treadmark.aws.added", "treadmark.aws.modified"}
     # ARN must be used verbatim as the uri — NOT wrapped in file://
     uris = [r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
             for r in results]

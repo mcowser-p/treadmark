@@ -1,5 +1,5 @@
 ﻿# scripts/bootstrap.ps1
-# One-shot setup for a fresh clone of cairn on Windows.
+# One-shot setup for a fresh clone of treadmark on Windows.
 
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -25,7 +25,7 @@ Write-Host ">>> Installing Python build dependencies..."
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet build pyinstaller pyyaml pywin32
 
-Write-Host ">>> Installing cairn in editable mode..."
+Write-Host ">>> Installing treadmark in editable mode..."
 python -m pip install -e ".[all]"
 
 # Conventional-commit enforcement: PR titles/commits drive releases via
@@ -48,6 +48,6 @@ if (Get-Command dotnet -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "Bootstrap complete. Try:"
-Write-Host "  cairn --version"
-Write-Host "  .\scripts\build-windows.ps1     # produce dist/cairn-windows-x86_64.exe and .msi"
+Write-Host "  treadmark --version"
+Write-Host "  .\scripts\build-windows.ps1     # produce dist/treadmark-windows-x86_64.exe and .msi"
 Write-Host ""

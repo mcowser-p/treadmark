@@ -23,7 +23,7 @@ if ! command -v limactl >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! ls dist/cairn_*.deb >/dev/null 2>&1 || ! ls dist/cairn-*.rpm >/dev/null 2>&1; then
+if ! ls dist/treadmark_*.deb >/dev/null 2>&1 || ! ls dist/treadmark-*.rpm >/dev/null 2>&1; then
     echo "[!] no artifacts in dist/ — run 'bash scripts/smoke-local.sh' first" >&2
     exit 1
 fi
@@ -37,7 +37,7 @@ esac
 declare -a passed=() failed=()
 for tpl in packaging/lima/*.yaml; do
     distro=$(basename "$tpl" .yaml)
-    name="cairn-smoke-$distro"
+    name="treadmark-smoke-$distro"
     echo ""
     echo "=============================================================="
     echo ">>> VM smoke: $distro"

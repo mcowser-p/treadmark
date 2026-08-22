@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/bootstrap.sh
-# One-shot setup for a fresh clone of cairn. Installs build deps so
+# One-shot setup for a fresh clone of treadmark. Installs build deps so
 # `bash scripts/build-linux.sh` works immediately afterward.
 
 set -euo pipefail
@@ -44,7 +44,7 @@ if [ "$(uname)" = "Linux" ]; then
     fi
 fi
 
-echo ">>> Installing cairn in editable mode for local testing..."
+echo ">>> Installing treadmark in editable mode for local testing..."
 python3 -m pip install -e ".[all]" $PIP_FLAGS
 
 # Conventional-commit enforcement: PR titles/commits drive releases via
@@ -57,7 +57,7 @@ fi
 
 echo ""
 echo "Bootstrap complete. Try:"
-echo "  cairn --version"
+echo "  treadmark --version"
 echo "  bash scripts/build-linux.sh           # produce dist/*.{whl,deb,rpm,binary}"
 echo "  bash scripts/build-wheel.sh           # produce wheel only"
 echo ""

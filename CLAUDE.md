@@ -13,7 +13,7 @@ file only pins the rules that must survive even a skim:
 - Never hand-edit the version in `pyproject.toml`, tags, or released
   CHANGELOG sections — python-semantic-release owns them. To cut a release,
   land a `feat:`/`fix:` on `main` (see the `release` skill).
-- Core code (`src/cairn/`) has zero hard runtime deps and supports
+- Core code (`src/treadmark/`) has zero hard runtime deps and supports
   Python ≥ 3.9. Exit codes 0/1/2 are API.
 - Baselines store logical paths (`--root` mapping); never persist real
   paths. Placeholder metadata (`Your Org`/`example.com`) is intentionally

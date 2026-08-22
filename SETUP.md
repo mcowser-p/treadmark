@@ -1,14 +1,14 @@
 # Repository Setup Guide
 
-You're holding the cairn source tree but not a git repository yet. This guide walks through standing up the actual repo, configuring it, and pushing to GitHub. About 15 minutes start to finish, mostly clicking around in GitHub settings.
+You're holding the treadmark source tree but not a git repository yet. This guide walks through standing up the actual repo, configuring it, and pushing to GitHub. About 15 minutes start to finish, mostly clicking around in GitHub settings.
 
 ## 1. Local repo init
 
 ```bash
-# From inside the extracted cairn/ directory:
+# From inside the extracted treadmark/ directory:
 git init
 git add .
-git commit -m "feat: initial cairn release"
+git commit -m "feat: initial treadmark release"
 git branch -M main
 ```
 
@@ -19,23 +19,23 @@ That gives you a clean local repo with one commit. The commit message uses the c
 Before pushing, four placeholders need your real values. Find them with:
 
 ```bash
-grep -rln "Your Org\|example.com/cairn\|YourOrg\\\\Cairn" --include="*.py" --include="*.toml" --include="*.wxs" --include="*.md" --include="*.spec" --include="*.sh"
+grep -rln "Your Org\|example.com/treadmark\|YourOrg\\\\Treadmark" --include="*.py" --include="*.toml" --include="*.wxs" --include="*.md" --include="*.spec" --include="*.sh"
 ```
 
 You'll get hits in:
 
 | File | Replace |
 |---|---|
-| `pyproject.toml` | `Your Org` → your organization name; `https://example.com/cairn` → your homepage |
+| `pyproject.toml` | `Your Org` → your organization name; `https://example.com/treadmark` → your homepage |
 | `LICENSE` | `Your Org` → your copyright holder |
-| `windows/cairn.wxs` | `Your Org`, `Software\YourOrg\Cairn` |
+| `windows/treadmark.wxs` | `Your Org`, `Software\YourOrg\Treadmark` |
 | `windows/License.rtf` | `Your Org` |
-| `scripts/build-deb.sh` | `Homepage: https://example.com/cairn`, `Maintainer: ops@example.com` |
-| `packaging/cairn.spec` | `URL`, maintainer email |
+| `scripts/build-deb.sh` | `Homepage: https://example.com/treadmark`, `Maintainer: ops@example.com` |
+| `packaging/treadmark.spec` | `URL`, maintainer email |
 | `README.md` and `docs/*.md` | example URLs |
 | `CHANGELOG.md` | `Your Org` |
 
-✅ **Done:** the `UpgradeCode` GUID in `windows/cairn.wxs` has been
+✅ **Done:** the `UpgradeCode` GUID in `windows/treadmark.wxs` has been
 regenerated (`589f68fc-59fe-41a1-8ef8-2c2b31bdcc16`) — no longer the
 template placeholder. Once a release ships with it, it's **permanent for
 your product line** — never change it again, or Windows installs from older
@@ -55,13 +55,13 @@ git commit -m "chore: replace org placeholders with real values"
 Either via the web UI (https://github.com/new) or the CLI:
 
 ```bash
-gh repo create YOUR-ORG/cairn --private --source=. --remote=origin --push
+gh repo create YOUR-ORG/treadmark --private --source=. --remote=origin --push
 ```
 
 If you used the web UI:
 
 ```bash
-git remote add origin git@github.com:YOUR-ORG/cairn.git
+git remote add origin git@github.com:YOUR-ORG/treadmark.git
 git push -u origin main
 ```
 
@@ -113,7 +113,7 @@ Authenticode requires a paid code-signing certificate. Once you have one, add a 
 - name: sign msi
   run: |
     signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
-      /f $env:CERT_PATH /p $env:CERT_PASS dist\cairn-*.msi
+      /f $env:CERT_PATH /p $env:CERT_PASS dist\treadmark-*.msi
   env:
     CERT_PATH: ${{ secrets.AUTHENTICODE_CERT_PATH }}
     CERT_PASS: ${{ secrets.AUTHENTICODE_CERT_PASS }}
@@ -155,20 +155,20 @@ Before pointing real hosts at this, install from a release and run through the b
 
 ```bash
 # Linux
-sudo apt install ./cairn_0.3.0_amd64.deb
-sudo cairn files init --config /etc/cairn/cairn.yaml
-sudo cairn baseline info --config /etc/cairn/cairn.yaml
+sudo apt install ./treadmark_0.3.0_amd64.deb
+sudo treadmark files init --config /etc/treadmark/treadmark.yaml
+sudo treadmark baseline info --config /etc/treadmark/treadmark.yaml
 # (modify something under /etc)
-sudo cairn files scan --config /etc/cairn/cairn.yaml --report drift.md
+sudo treadmark files scan --config /etc/treadmark/treadmark.yaml --report drift.md
 ```
 
 ```powershell
 # Windows
-msiexec /i cairn-0.3.0.msi /qb
-cairn files init --config C:\ProgramData\Cairn\cairn.yaml
-cairn baseline info --config C:\ProgramData\Cairn\cairn.yaml
+msiexec /i treadmark-0.3.0.msi /qb
+treadmark files init --config C:\ProgramData\Treadmark\treadmark.yaml
+treadmark baseline info --config C:\ProgramData\Treadmark\treadmark.yaml
 # (modify something under C:\Program Files)
-cairn files scan --config C:\ProgramData\Cairn\cairn.yaml --report drift.md
+treadmark files scan --config C:\ProgramData\Treadmark\treadmark.yaml --report drift.md
 ```
 
 If anything's off, file a `fix:` PR; semantic-release will cut the patch automatically when it merges.
@@ -178,14 +178,14 @@ If anything's off, file a `fix:` PR; semantic-release will cut the patch automat
 All placeholders are replaced: license is **Apache-2.0** (`LICENSE`,
 `License.rtf`, pyproject `license`, rpm `License:`), org is **mcowser-p**
 (pyproject authors, MSI `Manufacturer`, exe `--company-name`), URLs point at
-**https://github.com/mcowser-p/cairn** (pyproject urls, deb/rpm metadata,
+**https://github.com/mcowser-p/treadmark** (pyproject urls, deb/rpm metadata,
 `ARPHELPLINK`, SARIF `informationUri`), and the maintainer contact is the
 GitHub noreply address (`mcowser-p@users.noreply.github.com` — no real
 mailbox published).
 
 Two things are now **permanent** — never change casually:
 - the WiX `UpgradeCode` GUID (already locked earlier), and
-- the MSI state registry path `Software\mcowser-p\Cairn` (functional:
+- the MSI state registry path `Software\mcowser-p\Treadmark` (functional:
   changing it orphans installed-state on upgrade).
 
 ## 8. Day-2 things you'll want eventually
@@ -193,7 +193,7 @@ Two things are now **permanent** — never change casually:
 In rough priority order:
 
 1. **Smoke-test job in CI.** ✅ Done — `scripts/smoke-test.sh` runs in ubuntu:24.04 + almalinux:10 + amazonlinux:2023 containers on every PR (`ci.yml`) and gates release artifact publishing on both arches (`release.yml`). Run locally with `bash scripts/smoke-local.sh`; full-VM pass (SELinux-enforcing Alma) with `bash scripts/smoke-vm.sh`. To widen distro coverage, add images to the workflow matrices and `SMOKE_IMAGES`.
-2. **Your own apt/yum repo.** `apt install cairn` from your domain. Use `aptly` (Debian) and `createrepo` (RPM) on S3+CloudFront, or GitHub Pages for very small fleets.
+2. **Your own apt/yum repo.** `apt install treadmark` from your domain. Use `aptly` (Debian) and `createrepo` (RPM) on S3+CloudFront, or GitHub Pages for very small fleets.
 3. **The Windows half end-to-end.** The .wxs is structurally correct but the MSI hasn't been built on a real Windows host yet. First time `scripts/build-windows.ps1` runs on Windows is when you'll find out if anything's off.
 
 ## What this guide doesn't do
@@ -203,6 +203,6 @@ These are intentional gaps; address them when they're real needs, not before:
 - No central management server
 - No automated agent deployment (use Ansible/Salt/Puppet/Chef or your config-management of choice)
 - No dashboard (use the JSON/NDJSON output → your existing log aggregator)
-- No real-time monitoring (that's not what cairn is)
+- No real-time monitoring (that's not what treadmark is)
 
-If any of those become hard requirements, the answer probably isn't "extend cairn" — it's "deploy Wazuh alongside cairn." cairn is meant to stay small.
+If any of those become hard requirements, the answer probably isn't "extend treadmark" — it's "deploy Wazuh alongside treadmark." treadmark is meant to stay small.

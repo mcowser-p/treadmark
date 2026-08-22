@@ -22,7 +22,7 @@ if python3 -m pip install --help 2>/dev/null | grep -q break-system-packages; th
     PIP_FLAGS="--break-system-packages"
 fi
 # patchelf: Nuitka needs the binary on Linux (the PyPI wheel ships it).
-# Install cairn itself so Nuitka resolves the package like any import.
+# Install treadmark itself so Nuitka resolves the package like any import.
 python3 -m pip install --quiet $PIP_FLAGS nuitka patchelf pyyaml
 python3 -m pip install --quiet $PIP_FLAGS -e .
 
@@ -33,18 +33,18 @@ rm -rf build/_nuitka
 python3 -m nuitka \
     --onefile \
     --assume-yes-for-downloads \
-    --include-package=cairn \
+    --include-package=treadmark \
     --include-package=yaml \
     --product-version="$VERSION" \
-    --onefile-tempdir-spec='{CACHE_DIR}/cairn/{VERSION}' \
-    --output-filename=cairn \
+    --onefile-tempdir-spec='{CACHE_DIR}/treadmark/{VERSION}' \
+    --output-filename=treadmark \
     --output-dir=build/_nuitka \
-    scripts/cairn_launcher.py
+    scripts/treadmark_launcher.py
 # --onefile-tempdir-spec caches the self-extraction per version: a scan
 # tool gets invoked repeatedly (cron, CI), so first-run-only extraction
 # matters.
 
 ARCH=$(uname -m)   # x86_64, aarch64, etc.
-mv build/_nuitka/cairn "dist/cairn-linux-${ARCH}"
+mv build/_nuitka/treadmark "dist/treadmark-linux-${ARCH}"
 rm -rf build/_nuitka
-echo "built: dist/cairn-linux-${ARCH}"
+echo "built: dist/treadmark-linux-${ARCH}"

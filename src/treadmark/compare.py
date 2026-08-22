@@ -1,20 +1,20 @@
-"""cairn.compare — compare baselines across hosts.
+"""treadmark.compare — compare baselines across hosts.
 
 Two modes:
 
-  cairn compare against /path/to/golden.db --config local.yaml
+  treadmark compare against /path/to/golden.db --config local.yaml
         Walk the local filesystem (using `local.yaml`'s paths) and report drift
-        relative to the golden baseline. Same UX as `cairn files scan`, but the
+        relative to the golden baseline. Same UX as `treadmark files scan`, but the
         baseline came from a different machine.
 
-  cairn compare baselines /path/to/a.db /path/to/b.db
+  treadmark compare baselines /path/to/a.db /path/to/b.db
         Pure database-to-database diff. No filesystem walk, no hashing.
         Reports paths only-in-A, only-in-B, and present-in-both-but-different.
 
 The golden-baseline workflow is how you do file integrity monitoring at
 fleet scale: build the baseline once on a known-clean reference machine
 ("golden image"), copy the .db file to every other server of the same
-role, then `cairn compare against` on each to find drift.
+role, then `treadmark compare against` on each to find drift.
 
 Important caveat: this works best when the hosts are *meant* to be
 identical (same OS version, same package set, same role). Comparing a

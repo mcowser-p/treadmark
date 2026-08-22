@@ -1,0 +1,6 @@
+"""treadmark — cross-platform File Integrity Monitor.
+
+Like a treadmark of stones marking known-good ground: stack the baseline once,
+verify nothing's been disturbed every time you walk past.
+"""
+__version__ = "0.10.0"

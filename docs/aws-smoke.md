@@ -1,7 +1,7 @@
 # EC2 AMI smoke testing
 
 `scripts/smoke-aws.sh` proves the released artifacts install and run on the
-**real AWS images** cairn's users deploy on — not just in containers. Each run
+**real AWS images** treadmark's users deploy on — not just in containers. Each run
 launches one EC2 instance per platform from the current official AMI, installs
 the artifact (.rpm/.deb/MSI), walks the full init → scan → drift → accept
 cycle via the existing smoke scripts, reports a per-platform verdict, and
@@ -38,8 +38,8 @@ group has **zero ingress rules**. Each instance:
    `SMOKE_FOOTPRINT=1` with `--extended`) or `scripts/smoke-test.ps1`
    (Windows; winget-dependent captures self-skip on Server AMIs),
 3. uploads `smoke.log` + `status.json` with the **put-only** instance role
-   `cairn-smoke-instance` (can write `runs/*/results/*`, nothing else),
-4. echoes `CAIRN-SMOKE-RESULT: <platform> <rc>` to the serial console — the
+   `treadmark-smoke-instance` (can write `runs/*/results/*`, nothing else),
+4. echoes `TREADMARK-SMOKE-RESULT: <platform> <rc>` to the serial console — the
    fallback the driver reads when the upload path fails,
 5. shuts down; `--instance-initiated-shutdown-behavior terminate` reaps the
    instance even if the driver died.
@@ -52,7 +52,7 @@ The driver polls S3 for `status.json` markers, downloads results into
   are auto-annotated, see below)
 - **INFRA-FAIL** — the leg never phoned home (see `console.txt`)
 
-Everything created is tagged `Project=cairn-smoke` + `RunId=<id>`.
+Everything created is tagged `Project=treadmark-smoke` + `RunId=<id>`.
 
 ## One-time setup
 
@@ -63,10 +63,10 @@ bash scripts/smoke-aws.sh setup --region us-east-1
 
 `setup` is idempotent. It creates:
 
-- S3 bucket `cairn-smoke-<account>-<region>` — public access blocked, and a
+- S3 bucket `treadmark-smoke-<account>-<region>` — public access blocked, and a
   lifecycle rule expires `runs/` after 7 days (no S3 cleanup needed, ever)
-- IAM role + instance profile `cairn-smoke-instance` — trusts EC2, inline
-  policy allows only `s3:PutObject` on `arn:aws:s3:::cairn-smoke-*/runs/*/results/*`
+- IAM role + instance profile `treadmark-smoke-instance` — trusts EC2, inline
+  policy allows only `s3:PutObject` on `arn:aws:s3:::treadmark-smoke-*/runs/*/results/*`
 
 ## Usage
 
@@ -97,7 +97,7 @@ One-time OIDC setup in the AWS account:
 
 1. Create (or reuse) the GitHub OIDC provider
    `token.actions.githubusercontent.com`.
-2. Create a role `cairn-smoke-ci` with this trust policy (adjust `OWNER/REPO`):
+2. Create a role `treadmark-smoke-ci` with this trust policy (adjust `OWNER/REPO`):
 
 ```json
 {
@@ -152,15 +152,15 @@ One-time OIDC setup in the AWS account:
         "s3:DeleteObject", "s3:PutBucketPublicAccessBlock",
         "s3:PutLifecycleConfiguration", "s3:PutBucketTagging", "s3:GetBucketLocation"
       ],
-      "Resource": ["arn:aws:s3:::cairn-smoke-*", "arn:aws:s3:::cairn-smoke-*/*"]
+      "Resource": ["arn:aws:s3:::treadmark-smoke-*", "arn:aws:s3:::treadmark-smoke-*/*"]
     },
     {
       "Sid": "PassInstanceRole",
       "Effect": "Allow",
       "Action": ["iam:PassRole", "iam:GetRole", "iam:GetInstanceProfile"],
       "Resource": [
-        "arn:aws:iam::*:role/cairn-smoke-instance",
-        "arn:aws:iam::*:instance-profile/cairn-smoke-instance"
+        "arn:aws:iam::*:role/treadmark-smoke-instance",
+        "arn:aws:iam::*:instance-profile/treadmark-smoke-instance"
       ],
       "Condition": { "StringEquals": { "iam:PassedToService": "ec2.amazonaws.com" } }
     },

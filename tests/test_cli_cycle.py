@@ -131,7 +131,7 @@ def test_verify_exit_codes(run_cli, make_config, watch_tree):
 
 
 def test_all_init_accepts_force(run_cli, make_config, watch_tree):
-    # `cairn all init --force` must work like `files init --force` (the
+    # `treadmark all init --force` must work like `files init --force` (the
     # registry half no-ops on non-Windows). Regression: --force was missing
     # from the `all` subparser.
     tree = watch_tree()
@@ -175,10 +175,10 @@ def _subprocess_env():
 
 
 def test_subprocess_version():
-    r = subprocess.run([sys.executable, "-m", "cairn", "--version"],
+    r = subprocess.run([sys.executable, "-m", "treadmark", "--version"],
                        capture_output=True, text=True, env=_subprocess_env())
     assert r.returncode == 0
-    assert "cairn" in r.stdout
+    assert "treadmark" in r.stdout
 
 
 def test_subprocess_init_scan_round_trip(make_config, watch_tree):
@@ -186,12 +186,12 @@ def test_subprocess_init_scan_round_trip(make_config, watch_tree):
     cfg_path, _cfg = make_config([tree])
     env = _subprocess_env()
 
-    r = subprocess.run([sys.executable, "-m", "cairn", "files", "init",
+    r = subprocess.run([sys.executable, "-m", "treadmark", "files", "init",
                         "-c", cfg_path],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
 
-    r = subprocess.run([sys.executable, "-m", "cairn", "files", "scan",
+    r = subprocess.run([sys.executable, "-m", "treadmark", "files", "scan",
                         "-c", cfg_path],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr

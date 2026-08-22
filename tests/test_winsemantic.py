@@ -1,4 +1,4 @@
-"""Windows semantic parsers (cairn.winsemantic).
+"""Windows semantic parsers (treadmark.winsemantic).
 
 Pure parsing — runs on any OS with fixture data (no winreg needed).
 """
@@ -8,10 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from cairn import winsemantic as ws
+from treadmark import winsemantic as ws
 
 
-# A minimal stand-in for cairn.winreg_mon.RegRecord (only the fields the
+# A minimal stand-in for treadmark.winreg_mon.RegRecord (only the fields the
 # parser reads), so these tests need no Windows imports.
 @dataclass
 class Rec:
@@ -192,7 +192,7 @@ def test_classify_windows_path():
 # ---------------------------------------------------------------------------
 
 def test_flag_risks_windows():
-    from cairn.footprint import _flag_risks_windows
+    from treadmark.footprint import _flag_risks_windows
 
     services = [
         # IIS: auto-start as LocalSystem, image in System32 → low (the norm)
@@ -221,7 +221,7 @@ def test_flag_risks_windows():
 
 
 def test_systemroot_relative_driver_image_is_standard():
-    from cairn.footprint import _flag_risks_windows, _image_in_standard_path
+    from treadmark.footprint import _flag_risks_windows, _image_in_standard_path
 
     # All SCM notations that resolve against %SystemRoot% are standard.
     assert _image_in_standard_path(r"system32\drivers\wd\KslD.sys")
@@ -244,7 +244,7 @@ def test_systemroot_relative_driver_image_is_standard():
 
 
 def test_preexisting_driver_is_modified_not_installed():
-    from cairn.footprint import _flag_risks_windows
+    from treadmark.footprint import _flag_risks_windows
 
     ksld = ws.WindowsService(name="KslD", key_path="k", service_type=1,
                              image_path=r"system32\drivers\wd\KslD.sys",
@@ -261,7 +261,7 @@ def test_preexisting_driver_is_modified_not_installed():
 
 
 def test_kernel_driver_risk():
-    from cairn.footprint import _flag_risks_windows
+    from treadmark.footprint import _flag_risks_windows
     # A .sys image (like Datadog's ddnpm) and a Type=1 service both flag high.
     drv_by_ext = ws.WindowsService(
         name="ddnpm", key_path="k",
@@ -299,7 +299,7 @@ def test_acl_permissive_principal():
 
 
 def test_permissions_note():
-    from cairn.footprint import permissions_note
+    from treadmark.footprint import permissions_note
     # pywin32 present: no note key in the model.
     assert permissions_note(True) is None
     # degraded (e.g. no arm64 wheel): the note must say what's missing so a
@@ -311,7 +311,7 @@ def test_permissions_note():
 
 
 def test_derive_access_hints_windows():
-    from cairn.footprint import _derive_access_hints_windows
+    from treadmark.footprint import _derive_access_hints_windows
     from dataclasses import dataclass, field
 
     @dataclass
@@ -378,7 +378,7 @@ def test_derive_access_hints_windows():
 
 
 def test_flag_windows_world_writable_file():
-    from cairn.footprint import _flag_risks_windows
+    from treadmark.footprint import _flag_risks_windows
     from dataclasses import dataclass
 
     @dataclass

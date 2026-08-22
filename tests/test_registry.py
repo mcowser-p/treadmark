@@ -1,4 +1,4 @@
-"""Windows registry monitor (cairn.winreg_mon).
+"""Windows registry monitor (treadmark.winreg_mon).
 
 The functional cycle tests run ONLY on Windows (they need a live registry);
 they are the first real exercise of winreg_mon on a Windows CI runner. The
@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from cairn import winreg_mon
+from treadmark import winreg_mon
 
 WIN = sys.platform == "win32"
 win_only = pytest.mark.skipif(not WIN, reason="registry monitoring is Windows-only")
@@ -65,7 +65,7 @@ def reg_config(tmp_path):
     def _make(subkey):
         return {
             "db_path": str(tmp_path / "reg.db"),
-            "registry_keys": [rf"HKCU\Software\CairnTest\{subkey}"],
+            "registry_keys": [rf"HKCU\Software\TreadmarkTest\{subkey}"],
             "registry_recursive": True,
             "registry_max_depth": 4,
         }
@@ -75,7 +75,7 @@ def reg_config(tmp_path):
 @win_only
 def test_registry_init_scan_clean(reg_config):
     import winreg
-    sub = r"Software\CairnTest\clean"
+    sub = r"Software\TreadmarkTest\clean"
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
     try:
         winreg.SetValueEx(key, "Alpha", 0, winreg.REG_SZ, "one")
@@ -90,7 +90,7 @@ def test_registry_init_scan_clean(reg_config):
 @win_only
 def test_registry_detects_added_and_modified(reg_config, capsys):
     import winreg
-    sub = r"Software\CairnTest\drift"
+    sub = r"Software\TreadmarkTest\drift"
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
     try:
         winreg.SetValueEx(key, "Existing", 0, winreg.REG_SZ, "orig")
@@ -121,7 +121,7 @@ def test_registry_detects_added_and_modified(reg_config, capsys):
 @win_only
 def test_registry_update_accepts_drift(reg_config):
     import winreg
-    sub = r"Software\CairnTest\accept"
+    sub = r"Software\TreadmarkTest\accept"
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
     try:
         cfg = reg_config("accept")

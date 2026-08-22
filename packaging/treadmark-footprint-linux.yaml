@@ -1,13 +1,13 @@
-# cairn-footprint-linux.yaml
+# treadmark-footprint-linux.yaml
 #
 # Config for capturing an application's INSTALL FOOTPRINT on Linux.
 #
 # Workflow:
 #   1. On a clean OS image, before the developer touches it:
-#        cairn files init --config cairn-footprint-linux.yaml
+#        treadmark files init --config treadmark-footprint-linux.yaml
 #   2. Hand the box over. Developer installs their application.
 #   3. Capture the footprint:
-#        cairn footprint --config cairn-footprint-linux.yaml \
+#        treadmark footprint --config treadmark-footprint-linux.yaml \
 #                        --app myapp --report myapp-footprint.json
 #
 # The excludes below are tuned for this specific job: keep everything that
@@ -15,7 +15,7 @@
 # This is a different exclude list than you'd use for forensic drift detection
 # — here we tolerate missing some drift in exchange for a clean signal.
 
-db_path: /var/lib/cairn/clean-baseline.db
+db_path: /var/lib/treadmark/clean-baseline.db
 
 # ---------------------------------------------------------------------------
 # What to watch. Broad on purpose — an installer can put files anywhere.

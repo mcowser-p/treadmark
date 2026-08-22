@@ -13,7 +13,7 @@ import sys
 
 import pytest
 
-from cairn import files
+from treadmark import files
 from conftest import install_app
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32",

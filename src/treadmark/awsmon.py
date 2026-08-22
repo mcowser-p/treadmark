@@ -1,4 +1,4 @@
-"""cairn.awsmon — AWS account-configuration integrity monitor. DORMANT SCAFFOLD.
+"""treadmark.awsmon — AWS account-configuration integrity monitor. DORMANT SCAFFOLD.
 
 ⚠ DORMANT — unit-tested against fake clients (tests/test_awsmon.py) but NOT
 yet validated against a real AWS account. The CLI subcommand and the `aws`
@@ -7,13 +7,13 @@ pyproject.toml to re-enable). Import-safe without boto3 — and it must stay
 that way: azmon/gcpmon/k8smon import DEFAULT_VOLATILE_FIELDS and canonicalize
 from this module.
 
-The third cairn subsystem, modeled on winreg_mon: a point-in-time baseline of
+The third treadmark subsystem, modeled on winreg_mon: a point-in-time baseline of
 security-relevant account configuration, an offline diff on rescan, and the
 0/1/2 exit-code contract. Where the registry monitor walks hives, this walks
 read-only AWS APIs (Describe*/List*/Get* only) across the account's regions.
 
 Design notes:
-- boto3 is an OPTIONAL dependency (`pip install "cairn[aws]"`), mirroring the
+- boto3 is an OPTIONAL dependency (`pip install "treadmark[aws]"`), mirroring the
   pywin32 pattern — the core package keeps zero hard runtime deps. Without it
   every command explains and exits 2.
 - Each resource's configuration is stored as a CANONICAL serialization:
@@ -402,7 +402,7 @@ def _require_boto3(quiet: bool = False) -> bool:
     if HAVE_BOTO3:
         return True
     if not quiet:
-        print('[!] boto3 not installed; run:  pip install "cairn[aws]"',
+        print('[!] boto3 not installed; run:  pip install "treadmark[aws]"',
               file=sys.stderr)
     return False
 

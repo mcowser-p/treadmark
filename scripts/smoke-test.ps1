@@ -12,8 +12,8 @@ $PSNativeCommandUseErrorActionPreference = $false  # we check $LASTEXITCODE ours
 function Step($m) { Write-Host "`n>>> $m" }
 function Fail($m) { Write-Error "[SMOKE FAIL] $m"; exit 1 }
 
-$exe = "$env:ProgramFiles\Cairn\cairn.exe"
-$cfg = "$env:ProgramData\Cairn\cairn.yaml"
+$exe = "$env:ProgramFiles\Treadmark\treadmark.exe"
+$cfg = "$env:ProgramData\Treadmark\treadmark.yaml"
 
 # Windows Server AMIs (EC2) ship without winget — every winget-dependent
 # capture below checks this and skips cleanly instead of erroring five times.
@@ -22,7 +22,7 @@ $HasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
 # ---------------------------------------------------------------------------
 # 1. Install the MSI
 # ---------------------------------------------------------------------------
-$msi = Get-ChildItem dist\cairn-*.msi | Select-Object -First 1
+$msi = Get-ChildItem dist\treadmark-*.msi | Select-Object -First 1
 if (-not $msi) { Fail "no MSI found in dist\" }
 Step "installing $($msi.Name)"
 $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/i `"$($msi.FullName)`" /qn /l*v install.log"
@@ -39,7 +39,7 @@ Step "packaged layout"
 if (-not (Test-Path $exe)) { Fail "binary missing: $exe" }
 if (-not (Test-Path $cfg)) { Fail "shipped config missing: $cfg" }
 
-Step "cairn --version"
+Step "treadmark --version"
 & $exe --version
 if ($LASTEXITCODE -ne 0) { Fail "binary does not execute" }
 
@@ -51,9 +51,9 @@ if ($LASTEXITCODE -ne 0) { Fail "binary does not execute" }
 # init → scan → drift → accept cycle works, so point a minimal config at a
 # temp tree. (Section 2 already confirmed the shipped config installs.)
 # ---------------------------------------------------------------------------
-$watch = "$env:TEMP\cairn-smoke-files"
-$smokeCfg = "$env:TEMP\cairn-smoke-files.json"
-$smokeDb  = "$env:TEMP\cairn-smoke-files.db"
+$watch = "$env:TEMP\treadmark-smoke-files"
+$smokeCfg = "$env:TEMP\treadmark-smoke-files.json"
+$smokeDb  = "$env:TEMP\treadmark-smoke-files.db"
 Remove-Item -Recurse -Force $watch, $smokeDb -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $watch | Out-Null
 "baseline one" | Out-File "$watch\app.conf" -Encoding ascii
@@ -73,13 +73,13 @@ Step "clean scan expects exit 0"
 if ($LASTEXITCODE -ne 0) { Fail "clean scan exited $LASTEXITCODE" }
 
 Step "plant drift and expect exit 1 with the file reported"
-$drift = "$watch\cairn-smoke-drift.txt"
+$drift = "$watch\treadmark-smoke-drift.txt"
 "smoke-test marker" | Out-File -FilePath $drift -Encoding ascii
 & $exe files scan --config $smokeCfg --report smoke.json | Out-Null
 if ($LASTEXITCODE -ne 1) { Fail "drift scan exited $LASTEXITCODE, expected 1" }
 $report = Get-Content smoke.json -Raw
 if ($report -notmatch '"has_drift": true') { Fail "report lacks has_drift=true" }
-if ($report -notmatch 'cairn-smoke-drift') { Fail "planted file not reported" }
+if ($report -notmatch 'treadmark-smoke-drift') { Fail "planted file not reported" }
 
 Step "accept the drift, rescan expects exit 0"
 # Accept the whole watch dir, not just the planted file: creating a file
@@ -95,30 +95,30 @@ Remove-Item -Recurse -Force $watch, $smokeDb, $smokeCfg -ErrorAction SilentlyCon
 # 4. Registry cycle — winreg_mon's first real execution end-to-end
 # ---------------------------------------------------------------------------
 Step "registry cycle (HKCU test key)"
-$regCfg = "$env:TEMP\cairn-reg-smoke.json"
-$regDb  = "$env:TEMP\cairn-reg-smoke.db"
+$regCfg = "$env:TEMP\treadmark-reg-smoke.json"
+$regDb  = "$env:TEMP\treadmark-reg-smoke.db"
 @{
     db_path = $regDb
-    registry_keys = @("HKCU\Software\CairnSmoke")
+    registry_keys = @("HKCU\Software\TreadmarkSmoke")
     registry_recursive = $true
 } | ConvertTo-Json | Out-File -FilePath $regCfg -Encoding ascii
 
-New-Item -Path "HKCU:\Software\CairnSmoke" -Force | Out-Null
-New-ItemProperty -Path "HKCU:\Software\CairnSmoke" -Name "Baseline" -Value "orig" -PropertyType String -Force | Out-Null
+New-Item -Path "HKCU:\Software\TreadmarkSmoke" -Force | Out-Null
+New-ItemProperty -Path "HKCU:\Software\TreadmarkSmoke" -Name "Baseline" -Value "orig" -PropertyType String -Force | Out-Null
 
 & $exe registry init --config $regCfg
 if ($LASTEXITCODE -ne 0) { Fail "registry init failed" }
 & $exe registry scan --config $regCfg | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "clean registry scan exited $LASTEXITCODE" }
 
-New-ItemProperty -Path "HKCU:\Software\CairnSmoke" -Name "Planted" -Value "payload" -PropertyType String -Force | Out-Null
+New-ItemProperty -Path "HKCU:\Software\TreadmarkSmoke" -Name "Planted" -Value "payload" -PropertyType String -Force | Out-Null
 & $exe registry scan --config $regCfg | Out-Null
 if ($LASTEXITCODE -ne 1) { Fail "registry drift scan exited $LASTEXITCODE, expected 1" }
-Remove-Item -Path "HKCU:\Software\CairnSmoke" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "HKCU:\Software\TreadmarkSmoke" -Recurse -Force -ErrorAction SilentlyContinue
 
 # ---------------------------------------------------------------------------
 # 4b. Windows footprint — install real software (IIS via Windows feature,
-# Datadog via winget) and confirm `cairn footprint` reconstructs the services
+# Datadog via winget) and confirm `treadmark footprint` reconstructs the services
 # they register. This is the Windows semantic footprint's first real run.
 #
 # Baseline covers the file surface (inetsrv, Program Files) AND the registry
@@ -127,7 +127,7 @@ Remove-Item -Path "HKCU:\Software\CairnSmoke" -Recurse -Force -ErrorAction Silen
 # Seconds to wait after an install before scanning, so install-time service
 # churn settles and every service finishes registering. Overridable via env
 # for local runs that want it faster.
-$SettleSeconds = if ($env:CAIRN_SETTLE_SECONDS) { [int]$env:CAIRN_SETTLE_SECONDS } else { 20 }
+$SettleSeconds = if ($env:TREADMARK_SETTLE_SECONDS) { [int]$env:TREADMARK_SETTLE_SECONDS } else { 20 }
 
 Step "footprint: baseline files + registry Services"
 # Evidence for why the IIS footprint shows no services on THIS image: if
@@ -140,8 +140,8 @@ foreach ($svc in "W3SVC", "WAS", "IISADMIN") {
     $staged = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$svc"
     Write-Host "    pre-install: Services\$svc exists = $staged"
 }
-$fpCfg = "$env:TEMP\cairn-fp.json"
-$fpDb  = "$env:TEMP\cairn-fp.db"
+$fpCfg = "$env:TEMP\treadmark-fp.json"
+$fpDb  = "$env:TEMP\treadmark-fp.db"
 @{
     db_path = $fpDb
     paths = @(
@@ -156,7 +156,7 @@ $fpDb  = "$env:TEMP\cairn-fp.db"
     registry_keys = @("HKLM\System\CurrentControlSet\Services")
     registry_recursive = $true
     registry_max_depth = 2
-    # No registry_exclude here on purpose: `cairn footprint` now filters OS
+    # No registry_exclude here on purpose: `treadmark footprint` now filters OS
     # background-churn services (Defender, time sync, BITS, the servicing stack)
     # itself — see winsemantic.NOISE_SERVICES. Leaving the walk unfiltered means
     # this smoke actually EXERCISES that shipped filter (asserted below), rather
@@ -307,8 +307,8 @@ if ($env:SMOKE_EXTENDED -and $HasWinget) {
     )
     foreach ($app in $extApps) {
         Step "footprint($($app.Name)): baseline, install via winget, capture"
-        $appCfg = "$env:TEMP\cairn-fp-$($app.Name).json"
-        $appDb  = "$env:TEMP\cairn-fp-$($app.Name).db"
+        $appCfg = "$env:TEMP\treadmark-fp-$($app.Name).json"
+        $appDb  = "$env:TEMP\treadmark-fp-$($app.Name).db"
         $appFp  = "footprint-windows-$($app.Name).json"
         @{
             db_path = $appDb

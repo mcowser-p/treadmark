@@ -1,4 +1,4 @@
-"""cairn.azmon — Azure account-configuration integrity monitor. SCAFFOLD.
+"""treadmark.azmon — Azure account-configuration integrity monitor. SCAFFOLD.
 
 ⚠ UNTESTED SCAFFOLD — structured after awsmon but NOT yet exercised against a
 real Azure tenant. Deliberately unwired (no CLI subcommand, no pyproject extra
@@ -214,7 +214,7 @@ def _require_sdk(quiet: bool = False) -> bool:
     if HAVE_AZURE:
         return True
     if not quiet:
-        print('[!] azure SDK not installed; run:  pip install "cairn[azure]"',
+        print('[!] azure SDK not installed; run:  pip install "treadmark[azure]"',
               file=sys.stderr)
     return False
 

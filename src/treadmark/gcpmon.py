@@ -1,4 +1,4 @@
-"""cairn.gcpmon — GCP account-configuration integrity monitor. SCAFFOLD.
+"""treadmark.gcpmon — GCP account-configuration integrity monitor. SCAFFOLD.
 
 ⚠ UNTESTED SCAFFOLD — structured after awsmon but NOT yet exercised against a
 real GCP project/org. Deliberately unwired (no CLI subcommand, no active
@@ -235,7 +235,7 @@ def _require_sdk(quiet: bool = False) -> bool:
         return True
     if not quiet:
         print('[!] google-cloud-asset not installed; run:  '
-              'pip install "cairn[gcp]"', file=sys.stderr)
+              'pip install "treadmark[gcp]"', file=sys.stderr)
     return False
 
 
