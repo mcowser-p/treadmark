@@ -60,7 +60,7 @@ jobs:
           ln -sf /usr/bin/python3.12 /usr/local/bin/python3
       - uses: actions/checkout@v4
       - name: cache nuitka
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/Nuitka
           key: nuitka-el9-x86_64
@@ -154,14 +154,14 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: cache wix toolset
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~\.dotnet\tools
             ~\.wix
           key: wix-5.0.2
       - name: cache nuitka
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~\AppData\Local\Nuitka
           key: nuitka-windows-x86_64

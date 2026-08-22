@@ -126,7 +126,7 @@ jobs:
 
       # Nuitka compiles C — cache its work dir so warm builds are fast.
       - name: cache nuitka
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/Nuitka
           key: nuitka-el9-${{ matrix.arch }}
@@ -168,14 +168,14 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: cache wix toolset
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~\.dotnet\tools
             ~\.wix
           key: wix-5.0.2
       - name: cache nuitka
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~\AppData\Local\Nuitka
           key: nuitka-windows-x86_64
