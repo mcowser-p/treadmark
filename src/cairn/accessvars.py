@@ -7,7 +7,7 @@ derives the role's variables from a footprint model and emits them as a YAML
 vars file, applied with e.g.
 
     ansible-playbook playbooks/5_apply_access_profile.yml \
-        -e @myapp-access.yml -e group_name=rg.<host>.app-restricted
+        -e @myapp-access.yml -e group_name=<hostname>-app_restricted
 
 Design constraints:
   - zero dependencies: YAML is hand-emitted (same reason report.py hand-emits
@@ -309,7 +309,7 @@ def render_access_vars(model: dict) -> str:
         f"# application: {app}   footprint schema: {model.get('schema_version', '?')}"
         f"   captured: {model.get('generated_at', '?')}",
         "# Review before applying. Pass the team at apply time:",
-        "#   -e group_name=rg.<host>.app-restricted   (or -e user_name=...)",
+        "#   -e group_name=<hostname>-app_restricted   (or -e user_name=...)",
         "# declarative_access_user / declarative_access_group are intentionally NOT set here.",
     ]
     for key in _KEY_ORDER:
