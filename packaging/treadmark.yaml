@@ -133,6 +133,16 @@ max_file_size_mb: 500
 store_content: true
 store_content_max_kb: 256   # don't store text files larger than this
 
+# Which changes a scan reports. Unset compares everything: content
+# (sha256/size), mode, owner, group, ACL, mtime (and atime when
+# track_access_time is on). Name a subset to drop the rest — mainly for
+# golden-image fleets, where clones churn timestamps at first boot:
+#   compare_fields: [sha256, size, mode, owner, group, acl]  # no timestamps
+#   compare_fields: [sha256, size]                           # content only
+# Trade-off: dropping mtime hides touch-style timestomping from scans, so
+# keep the forensic single-host default unless clone churn is drowning you.
+# compare_fields: [sha256, size, mode, owner, group, acl]
+
 # Optional report output. If `path` is set, every `treadmark files scan` writes
 # a report file in addition to printing terminal output. Format is auto-
 # detected from the extension (json/ndjson/csv/sarif/md/html/txt) or override

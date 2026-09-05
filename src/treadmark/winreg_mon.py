@@ -82,6 +82,10 @@ DEFAULT_CONFIG = {
     "registry_recursive": True,
     "registry_max_depth": 6,        # keep the Services tree from blowing up
     "registry_exclude": [],         # substring matches against full key path
+    # Value-name-level excludes: {key: <key-path substring>, value: <exact
+    # value name>} mappings. Unmonitors single churny values (a PID, a
+    # per-boot GUID) without unwatching the whole key. See value_excluded().
+    "registry_exclude_values": [],
     "registry_skip_volatile": True, # don't bother flagging perf counters etc.
 }
 
@@ -106,6 +110,95 @@ def load_config(path: Optional[str]) -> dict:
         user = json.loads(text)
     cfg.update(user)
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Value-name-level excludes
+#
+# `registry_exclude` prunes whole key subtrees, which is too blunt for keys
+# where one value churns on its own while the rest is prime tamper surface:
+# Control\Lsa's LsaPid is a process id (new every boot) but the key also
+# holds the authentication-package lists. These helpers are pure and run on
+# any OS so the matching semantics stay testable off-Windows.
+# ---------------------------------------------------------------------------
+
+def _canon_key(key: str) -> str:
+    """Normalize a key path (or key pattern) for matching: one separator
+    flavor, case-insensitive — the registry itself is case-insensitive."""
+    return key.replace("/", "\\").lower()
+
+
+def value_excluded(key_path: str, value_name: str, cfg: dict) -> bool:
+    """True when a `registry_exclude_values` entry matches (key, value).
+
+    Entries are mappings: {"key": ..., "value": ...}. `value` is compared
+    case-insensitively against the exact value name treadmark stores — use
+    "(Default)" for a key's default value. `key` is an optional
+    case-insensitive substring of the full key path (same semantics as
+    registry_exclude); an entry without `key` matches its value name under
+    every monitored key. Malformed entries never match — cmd_init/cmd_scan
+    reject them up front, this stays permissive for library callers.
+    """
+    excludes = cfg.get("registry_exclude_values") or []
+    if not excludes:
+        return False
+    key_l = _canon_key(key_path)
+    val_l = value_name.lower()
+    for ent in excludes:
+        if not isinstance(ent, dict):
+            continue
+        want_val = ent.get("value")
+        if not isinstance(want_val, str) or want_val.lower() != val_l:
+            continue
+        want_key = ent.get("key")
+        if want_key is None:
+            return True
+        if isinstance(want_key, str) and _canon_key(want_key) in key_l:
+            return True
+    return False
+
+
+def value_exclude_problems(cfg: dict) -> list[str]:
+    """Validate cfg['registry_exclude_values']; returns problems (empty = valid).
+
+    Fail closed: a malformed entry would silently keep a value monitored (or
+    a typo'd field would exclude nothing), so commands exit 2 on any problem.
+    """
+    raw = cfg.get("registry_exclude_values")
+    if raw is None or raw == []:
+        return []
+    if not isinstance(raw, list):
+        return ["registry_exclude_values must be a list of {key, value} mappings"]
+    problems: list[str] = []
+    for i, ent in enumerate(raw):
+        where = f"registry_exclude_values[{i}]"
+        if not isinstance(ent, dict):
+            problems.append(f"{where}: must be a mapping with 'value' and an "
+                            f"optional 'key', got {type(ent).__name__}")
+            continue
+        unknown = sorted(set(ent) - {"key", "value"})
+        if unknown:
+            problems.append(f"{where}: unknown field(s) "
+                            f"{', '.join(repr(u) for u in unknown)} "
+                            "(only 'key' and 'value')")
+        val = ent.get("value")
+        if not isinstance(val, str) or not val:
+            problems.append(f"{where}: 'value' must be a non-empty string "
+                            '(use "(Default)" for a key\'s default value)')
+        key = ent.get("key")
+        if key is not None and (not isinstance(key, str) or not key):
+            problems.append(f"{where}: 'key' must be a non-empty string when present")
+    return problems
+
+
+def _reject_bad_value_excludes(cfg: dict) -> bool:
+    """Print registry_exclude_values problems to stderr; True means exit 2.
+    Runs before the IS_WINDOWS no-op so a typo'd config that ships to both
+    fleets gets caught on the Linux side too."""
+    problems = value_exclude_problems(cfg)
+    for msg in problems:
+        print(f"[!] {msg}", file=sys.stderr)
+    return bool(problems)
 
 
 # ---------------------------------------------------------------------------
@@ -213,8 +306,11 @@ def walk_key(full_key: str, cfg: dict, depth: int = 0) -> Iterator[RegRecord]:
             except OSError as e:
                 yield RegRecord(full_key, f"<value#{i}>", -1, "", "", f"enum-error: {e}")
                 continue
+            display = vname or "(Default)"
+            if value_excluded(full_key, display, cfg):
+                continue
             rep = _value_to_repr(vdata, vtype)
-            yield RegRecord(full_key, vname or "(Default)", vtype, rep, _sha(rep), None)
+            yield RegRecord(full_key, display, vtype, rep, _sha(rep), None)
 
         # --- recurse into subkeys ---
         if cfg.get("registry_recursive", True):
@@ -319,6 +415,8 @@ def collect_changes(cfg: dict):
 
 
 def cmd_init(cfg: dict) -> int:
+    if _reject_bad_value_excludes(cfg):
+        return 2
     if not IS_WINDOWS:
         print("[i] registry monitoring only runs on Windows; nothing to do here.")
         return 0
@@ -339,6 +437,8 @@ def cmd_init(cfg: dict) -> int:
 
 
 def cmd_scan(cfg: dict, json_out: bool = False, update: bool = False, quiet: bool = False) -> int:
+    if _reject_bad_value_excludes(cfg):
+        return 2
     if not IS_WINDOWS:
         if not quiet:
             print("[i] registry monitoring only runs on Windows; skipping.")

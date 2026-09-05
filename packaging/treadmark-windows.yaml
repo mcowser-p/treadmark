@@ -133,6 +133,36 @@ registry_recursive: true
 # identity (ImagePath/Start/ObjectName) without walking every nested blob.
 registry_max_depth: 3
 registry_exclude: []          # substring match against the full key path
+
+# Value-name-level excludes: unmonitor single churny values without giving
+# up the rest of the key. Each entry has `value` (exact value name,
+# case-insensitive; use "(Default)" for a key's default value) and an
+# optional `key` (case-insensitive substring of the full key path, same
+# semantics as registry_exclude; omit it to match the value name under
+# every monitored key).
+#
+# LsaPid ships excluded: it is the PID of lsass.exe, new on every boot,
+# while the rest of Control\Lsa (authentication package lists) is exactly
+# why the key is watched.
+#
+# NOTE: adding an exclude on a host that already has a baseline reports the
+# value as *deleted* once (it is in the baseline but no longer walked).
+# Accept it one time with `treadmark registry update`, or rebuild the baseline.
+registry_exclude_values:
+  - key: CurrentControlSet\Control\Lsa
+    value: LsaPid
+
+  # --- Golden-image / cloned-fleet churn: these differ per clone or per
+  #     boot and drown the signal when many clones scan against one golden
+  #     baseline. Uncomment for cloned fleets; on a single pet host they
+  #     are legitimate (if low-value) tamper surface, so they ship watched. ---
+  # - key: Services\LanmanServer\Parameters
+  #   value: Guid                    # regenerated each boot
+  # - key: Services\Tcpip\Parameters
+  #   value: Hostname                # per-clone identity
+  # - key: Services\Tcpip\Parameters
+  #   value: NV Hostname
+
 registry_skip_volatile: true  # don't flag perf-counter / volatile churn
 
 # Store gzipped content of small text files in the baseline so `treadmark files
@@ -142,6 +172,16 @@ registry_skip_volatile: true  # don't flag perf-counter / volatile churn
 # than on a Linux /etc; still useful for the hosts file and text configs.
 store_content: true
 store_content_max_kb: 256
+
+# Which file changes a scan reports. Unset = everything (content, mode,
+# owner/group, ACL, mtime). On golden-image clones the Task Scheduler
+# re-registers every task at first boot, touching mtime across most of
+# C:\Windows\System32\Tasks without changing a byte — churn that drowns the
+# persistence signal. Uncomment to keep watching those trees for real
+# changes (content + ACL/owner) while ignoring timestamp-only drift.
+# Trade-off: timestomping (an mtime change with no content change) is then
+# no longer reported.
+# compare_fields: [sha256, size, mode, owner, group, acl]
 
 # Optional report output — see docs/output-formats.md.
 # report:

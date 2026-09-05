@@ -61,6 +61,9 @@ DEFAULT_CONFIG = {
     "hash_algorithm": "sha256",
     "max_file_size_mb": 500,   # files bigger than this are tracked but not hashed
     "track_access_time": False,  # atime is noisy; off by default
+    # None = report every kind of change; or a list naming which diffs to
+    # report, e.g. ["sha256", "size"] for content-only (see COMPARE_FIELDS).
+    "compare_fields": None,
 }
 
 
@@ -637,6 +640,10 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_init(cfg: dict, force: bool = False) -> int:
+    # init doesn't diff, but rejecting a typo'd compare_fields here means the
+    # operator finds out at deploy time, not at the first (silently partial) scan.
+    if _reject_bad_compare_fields(cfg):
+        return 2
     db_path = cfg["db_path"]
     if os.path.exists(db_path) and not force:
         print(f"[!] {db_path} already exists. Use --force to overwrite, or run `update`.")
@@ -694,8 +701,55 @@ def cmd_init(cfg: dict, force: bool = False) -> int:
     return 0
 
 
-# fields where a change is "metadata" rather than "content"
-META_FIELDS = ("size", "mtime", "ctime", "mode", "uid", "gid", "owner", "group", "acl")
+# Every field diff_records() knows how to compare. The `compare_fields`
+# config option names a subset to compare instead — e.g. ["sha256", "size"]
+# reports only content changes and skips metadata-only drift (a re-touched
+# mtime on Windows Task XML at first boot, a chmod on a scratch tree).
+# Unset/None compares everything. Selection only narrows: listing "atime"
+# still additionally requires track_access_time, and mtime keeps its
+# integer-second, only-without-content-change reporting rule.
+COMPARE_FIELDS = ("sha256", "size", "mode", "owner", "group", "acl", "mtime", "atime")
+
+
+def compare_fields_problems(cfg: dict) -> list[str]:
+    """Validate cfg['compare_fields']; returns problems (empty = valid).
+
+    Fail closed: a typo ("sha265") would otherwise silently stop content
+    comparison on a security tool, so commands exit 2 on any problem
+    instead of scanning with a partial field set.
+    """
+    raw = cfg.get("compare_fields")
+    if raw is None:
+        return []
+    if isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+        return ['compare_fields must be a list of field names, e.g. ["sha256", "size"]']
+    if not raw:
+        return ["compare_fields is empty — remove the key to compare all fields"]
+    valid = ", ".join(COMPARE_FIELDS)
+    return [
+        f"unknown compare_fields entry {f!r} (valid: {valid})"
+        for f in raw
+        if not isinstance(f, str) or f.lower() not in COMPARE_FIELDS
+    ]
+
+
+def _reject_bad_compare_fields(cfg: dict) -> bool:
+    """Print compare_fields problems to stderr; True means the caller must exit 2."""
+    problems = compare_fields_problems(cfg)
+    for msg in problems:
+        print(f"[!] {msg}", file=sys.stderr)
+    return bool(problems)
+
+
+def effective_compare_fields(cfg: dict) -> frozenset[str]:
+    """The fields diff_records() compares under this config (lowercased).
+
+    Malformed values fall back to comparing everything — the safe direction
+    for library callers; the CLI entry points reject them up front."""
+    raw = cfg.get("compare_fields")
+    if not raw or isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+        return frozenset(COMPARE_FIELDS)
+    return frozenset(str(f).lower() for f in raw)
 
 
 def unified_diff_for(old: FileRecord, new: FileRecord, max_lines: int = 60) -> Optional[str]:
@@ -729,37 +783,40 @@ def unified_diff_for(old: FileRecord, new: FileRecord, max_lines: int = 60) -> O
 
 
 def diff_records(old: FileRecord, new: FileRecord, cfg: dict) -> list[str]:
+    fields = effective_compare_fields(cfg)
     changes: list[str] = []
 
-    if old.sha256 and new.sha256 and old.sha256 != new.sha256:
+    if ("sha256" in fields and old.sha256 and new.sha256
+            and old.sha256 != new.sha256):
         changes.append(f"content sha256 {old.sha256[:12]}…→{new.sha256[:12]}…")
-    elif old.size != new.size:
+    elif "size" in fields and old.size != new.size:
         # different size and we didn't / couldn't hash one side
         changes.append(f"size {old.size}→{new.size}")
 
-    if old.mode != new.mode:
+    if "mode" in fields and old.mode != new.mode:
         changes.append(f"mode {stat.filemode(old.mode)}→{stat.filemode(new.mode)}")
 
-    if old.owner != new.owner:
+    if "owner" in fields and old.owner != new.owner:
         changes.append(f"owner {old.owner!r}→{new.owner!r}")
-    if old.group != new.group:
+    if "group" in fields and old.group != new.group:
         changes.append(f"group {old.group!r}→{new.group!r}")
 
-    if old.acl != new.acl:
+    if "acl" in fields and old.acl != new.acl:
         changes.append("acl changed")
 
     # mtime alone (without size/hash change) usually means a touch — still
     # worth noting, but only when the integer-second value actually changed.
     # Sub-second drift is just filesystem timestamp granularity and pollutes
     # forensic output with phantom changes.
-    if int(old.mtime) != int(new.mtime) and not any(
+    if "mtime" in fields and int(old.mtime) != int(new.mtime) and not any(
         c.startswith("content") or c.startswith("size") for c in changes
     ):
         # Truncate (not round) so the displayed values can never be equal —
         # the comparison above truncates, and "mtime X→X" reads as a bug.
         changes.append(f"mtime {int(old.mtime)}→{int(new.mtime)}")
 
-    if cfg.get("track_access_time") and old.atime != new.atime:
+    if ("atime" in fields and cfg.get("track_access_time")
+            and old.atime != new.atime):
         changes.append("atime changed")
 
     return changes
@@ -789,6 +846,9 @@ def cmd_scan(cfg: dict, json_out: bool = False,
     Returns exit code: 0 = clean, 1 = drift, 2 = error.
     """
     from . import report as report_mod  # local import to avoid circular at module load
+
+    if _reject_bad_compare_fields(cfg):
+        return 2
 
     db_path = cfg["db_path"]
     if not os.path.exists(db_path):

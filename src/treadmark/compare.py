@@ -98,6 +98,13 @@ def cmd_against(cfg: dict, golden_db: str, *, json_out: bool = False, quiet: boo
     if not cfg.get("paths"):
         print("[!] config has no `paths` configured.", file=sys.stderr)
         return 2
+    # Same fail-closed rule as `files scan`: a typo'd compare_fields must not
+    # silently drop comparisons from a drift check.
+    problems = files_mod.compare_fields_problems(cfg)
+    if problems:
+        for msg in problems:
+            print(f"[!] {msg}", file=sys.stderr)
+        return 2
 
     golden = load_external_baseline(golden_db)
     golden_meta = read_meta(golden_db)
