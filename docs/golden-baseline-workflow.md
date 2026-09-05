@@ -122,6 +122,56 @@ exclude:
 
 Tune iteratively: run `treadmark compare against` on a known-clean host, anything flagged that *should* differ goes into `exclude:`, repeat until clean.
 
+## Metadata-only churn: `compare_fields`
+
+Cloned hosts touch timestamps without touching content. The worst offender
+is Windows: at first boot the Task Scheduler re-registers every scheduled
+task, so a clone shows a fresh mtime on nearly every file under
+`C:\Windows\System32\Tasks` and `C:\Windows\Tasks` while not one byte
+changed — and those trees are top-tier persistence surface you don't want
+to stop watching.
+
+`compare_fields` names which diffs `treadmark files scan` (and
+`treadmark compare against`) reports:
+
+```yaml
+# content + permissions/ownership, no timestamps — the golden-image sweet spot
+compare_fields: [sha256, size, mode, owner, group, acl]
+```
+
+Valid fields: `sha256`, `size`, `mode`, `owner`, `group`, `acl`, `mtime`,
+`atime`. Unset compares everything (`atime` additionally needs
+`track_access_time: true`). Unknown names fail the scan with exit 2 rather
+than silently narrowing it.
+
+Trade-off: dropping `mtime` means a bare timestamp change (timestomping) is
+no longer reported. Keep the default on single forensic hosts; narrow it
+for cloned fleets where the alternative is unwatching whole trees.
+
+## Per-clone registry churn: `registry_exclude_values`
+
+Some security-critical keys hold one value that legitimately differs per
+clone or per boot right next to values you must keep watching —
+`HKLM\System\CurrentControlSet\Control\Lsa` carries `LsaPid` (a process id,
+new every boot) alongside the authentication-package lists. `registry_exclude`
+can only prune whole keys; `registry_exclude_values` unmonitors single values:
+
+```yaml
+registry_exclude_values:
+  - key: CurrentControlSet\Control\Lsa   # substring of the full key path
+    value: LsaPid                        # exact value name (case-insensitive)
+  - key: Services\Tcpip\Parameters
+    value: Hostname                      # per-clone identity
+  - value: Epoch                         # no key: matches under every key
+```
+
+`key` uses the same case-insensitive substring semantics as
+`registry_exclude`; omit it to exclude the value name under every monitored
+key. Use `"(Default)"` to target a key's default value. As with path
+excludes, adding one on hosts that already have a baseline reports the
+value as deleted once — accept it with `treadmark registry update`, or
+rebuild the baseline.
+
 ## Versioning the golden baseline
 
 Treat golden baselines like any other artifact. Recommended:
