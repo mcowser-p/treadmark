@@ -2,6 +2,29 @@
 
 All notable changes to cairn are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After the initial release, entries below this line are appended automatically by `python-semantic-release` from conventional commit messages — don't edit them by hand.
 
+## v0.12.0 (2026-09-05)
+
+### Features
+
+- `compare_fields` config option (`files scan`, `compare against`,
+  `footprint`): a list naming which record diffs are reported — any of
+  `sha256`, `size`, `mode`, `owner`, `group`, `acl`, `mtime`, `atime`.
+  `[sha256, size, mode, owner, group, acl]` keeps content and
+  permission/ownership detection while ignoring timestamp-only drift
+  (golden-image clones re-touch mtime across whole trees at first boot).
+  Unset compares everything, exactly as before.
+- `registry_exclude_values` config option (`treadmark registry`):
+  value-name-level excludes — `{key: <key-path substring>, value: <exact
+  value name>}` mappings, both halves case-insensitive, `key` optional —
+  so a single churny value (a PID, a per-boot GUID) can be unmonitored
+  without unwatching its whole key.
+- Both options fail closed: a malformed or typo'd entry exits 2 with a
+  pointed message instead of silently narrowing a scan.
+- Shipped Windows config: `Control\Lsa` → `LsaPid` (the lsass PID, new
+  every boot) is excluded out of the box, with commented golden-image
+  blocks for the other per-clone identity values and a no-timestamps
+  `compare_fields` example.
+
 ## v0.11.0 (2026-08-22)
 
 ### ⚠ Breaking
