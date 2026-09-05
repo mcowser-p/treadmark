@@ -1040,7 +1040,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         return cmd_scan(cfg, json_out=args.json)
     if args.command == "update":
-        return cmd_update(cfg)
+        # This legacy parser has no --accept flags, so update always takes
+        # the "requires --accept" exit-2 guidance path.
+        return cmd_update(cfg, accept=[])
     if args.command == "verify":
         return cmd_verify(cfg)
     return 2

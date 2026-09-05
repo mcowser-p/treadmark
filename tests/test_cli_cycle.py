@@ -71,6 +71,18 @@ def test_update_requires_accept(run_cli, make_config, watch_tree):
     assert "--accept" in err
 
 
+def test_legacy_files_main_update_requires_accept(capsys, make_config, watch_tree):
+    """The legacy standalone entry point (files.main) has no --accept flags;
+    `update` must take the exit-2 guidance path, not crash."""
+    from treadmark import files
+
+    tree = watch_tree()
+    cfg_path, _cfg = make_config([tree])
+    rc = files.main(["update", "-c", cfg_path])
+    assert rc == 2
+    assert "--accept" in capsys.readouterr().err
+
+
 def test_update_accept_single_path(run_cli, make_config, watch_tree):
     tree = watch_tree()
     cfg_path, _cfg = make_config([tree])
