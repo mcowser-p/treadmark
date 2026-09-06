@@ -12,12 +12,15 @@
 #   linux /  build the artifacts, stamping that computed version into the
 #   windows  working tree so .deb/.rpm/.msi + `treadmark --version` are correct.
 #   smoke    install the freshly built packages on real distros / via the MSI.
-#   release  ONLY now: semantic-release bumps pyproject, commits, tags, pushes,
-#            and creates the GitHub Release.
+#   release  ONLY now: semantic-release creates the tag and the GitHub
+#            Release. No commit — the release PR already stamped pyproject.
 #   attach   download all artifacts, checksum, upload to that release.
 #
 # If `version` finds no release is warranted, every downstream job is skipped.
-# The release commit is tagged [skip ci] so it doesn't loop on itself.
+# Releases are PR-gated: main's ruleset forbids direct pushes, so the version
+# bump + changelog land via a release PR, and the release job only fires once
+# that PR is merged (pyproject stamp == computed next version). CI never
+# commits to main, so a release run can't retrigger this workflow.
 
 name: release
 
@@ -26,7 +29,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write     # semantic-release needs to push tags + commit
+  contents: write     # semantic-release pushes tags + creates Releases (no commits)
   issues: write       # for releases that close issues via "Closes #123"
   pull-requests: write
 
@@ -334,9 +337,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # =========================================================================
-  # 3. Everything is green — NOW create the release. semantic-release bumps
-  #    pyproject, commits [skip ci], tags, pushes, and creates the GitHub
-  #    Release (empty; assets are attached in the next job).
+  # 3. Everything is green — NOW create the release. semantic-release tags
+  #    and creates the GitHub Release (empty; assets are attached in the
+  #    next job). No commit — the release PR already stamped pyproject.
   # =========================================================================
   release:
     needs: [version, linux, windows, smoke]
