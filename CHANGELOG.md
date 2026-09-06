@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to cairn are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After the initial release, entries below this line are appended automatically by `python-semantic-release` from conventional commit messages — don't edit them by hand.
+All notable changes to treadmark are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries below this line land via release PRs (`chore(release): cut X.Y.Z` — drafted from conventional commit messages by `scripts/release-pr.sh`, then curated; see the `release` skill). Once a version is released, don't edit its section.
 
 ## v0.12.1 (2026-09-05)
 
