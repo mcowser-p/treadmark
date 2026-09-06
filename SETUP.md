@@ -78,7 +78,7 @@ These settings are required for the workflows we built to function correctly. Mo
 
 ### Settings → Actions → General → Workflow permissions
 
-- ✅ **Read and write permissions** ← required for semantic-release to push tags + commits
+- ✅ **Read and write permissions** ← required for semantic-release to push the release tag and create the GitHub Release. CI never commits to `main`; the version bump lands via a release PR (see §6).
 - ✅ Allow GitHub Actions to create and approve pull requests
 
 ### Settings → Branches → Add branch protection rule
@@ -90,13 +90,17 @@ For `main`:
 - ✅ Require branches to be up to date before merging
 - ✅ Do not allow bypassing the above settings
 
+These rules are load-bearing for releases: they block CI from pushing the
+version bump to `main`, which is why cutting a release goes through a
+release PR (see §6).
+
 ## 5. (Optional but recommended) Code signing
 
 For production, the .deb/.rpm and .msi should be signed. Without signing:
 
 - .deb/.rpm: `apt`/`dnf` will warn that the repo is unsigned
 - .msi: SmartScreen will flag it as "unknown publisher" on every install
-- exe: AV will flag PyInstaller binaries more aggressively
+- exe: AV will flag the Nuitka binaries more aggressively
 
 ### GPG (Linux artifacts)
 
@@ -144,10 +148,18 @@ git push
 gh pr create --title "feat: initial release" --body "Cuts v0.2.1"
 ```
 
-When merged, the workflow will:
-1. Run semantic-release, detect the `feat:`, bump 0.2.0 → 0.3.0 (held back from major by `major_on_zero=false`), tag, and create a GitHub Release
-2. Build all artifacts at the new version
-3. Upload .deb, .rpm, .msi, .exe, single-binary, wheel, and SHA256SUMS to the release
+When merged, the workflow runs the *build* half of the release:
+
+1. Detect the `feat:` and compute the next version — 0.2.0 → 0.3.0, held back from major by `major_on_zero=false` — with no side effects (`semantic-release version --print`; nothing is tagged)
+2. Build all artifacts stamped at that version and smoke-test them
+3. Stop there: the `release` job is skipped because `pyproject.toml` still holds the old version, and `main` is PR-protected so CI cannot push the bump itself. A green run that skips at `release` is the expected result of this merge.
+
+Publishing is gated on a **release PR**. From a clean, up-to-date `main`, run `bash scripts/release-pr.sh`: it creates the branch `release/vX.Y.Z`, stamps the version into `pyproject.toml` and `src/treadmark/__init__.py`, and drafts the `CHANGELOG.md` section. Polish the changelog, then open a PR titled exactly `chore(release): cut X.Y.Z` and squash-merge it. That second run finds the stamped version matching the computed one, so it:
+
+1. Tags `vX.Y.Z` and creates the GitHub Release (semantic-release runs with `commit: false` — CI never commits to `main`)
+2. Uploads the .deb, .rpm, .msi, .exe, standalone Linux binaries, and SHA256SUMS to the release. No wheel is attached — the sdist + wheel are published to PyPI via Trusted Publishing instead.
+
+The full procedure and its failure modes live in the `release` skill: [.claude/skills/release/SKILL.md](.claude/skills/release/SKILL.md).
 
 ## 7. Test the artifacts
 
@@ -171,7 +183,7 @@ treadmark baseline info --config C:\ProgramData\Treadmark\treadmark.yaml
 treadmark files scan --config C:\ProgramData\Treadmark\treadmark.yaml --report drift.md
 ```
 
-If anything's off, file a `fix:` PR; semantic-release will cut the patch automatically when it merges.
+If anything's off, file a `fix:` PR. Merging it computes and builds the patch version, but the patch only ships once you cut and merge the matching release PR (`bash scripts/release-pr.sh` again).
 
 ## Pre-publish TODO — ✅ done (2026-08-08)
 
@@ -194,7 +206,7 @@ In rough priority order:
 
 1. **Smoke-test job in CI.** ✅ Done — `scripts/smoke-test.sh` runs in ubuntu:24.04 + almalinux:10 + amazonlinux:2023 containers on every PR (`ci.yml`) and gates release artifact publishing on both arches (`release.yml`). Run locally with `bash scripts/smoke-local.sh`; full-VM pass (SELinux-enforcing Alma) with `bash scripts/smoke-vm.sh`. To widen distro coverage, add images to the workflow matrices and `SMOKE_IMAGES`.
 2. **Your own apt/yum repo.** `apt install treadmark` from your domain. Use `aptly` (Debian) and `createrepo` (RPM) on S3+CloudFront, or GitHub Pages for very small fleets.
-3. **The Windows half end-to-end.** The .wxs is structurally correct but the MSI hasn't been built on a real Windows host yet. First time `scripts/build-windows.ps1` runs on Windows is when you'll find out if anything's off.
+3. **The Windows half end-to-end.** ✅ Done — the `windows` job in `release.yml` builds the exe + MSI with `scripts/build-windows.ps1` and smoke-tests the MSI on every release run, as a first-class release gate; both artifacts are attached to each GitHub Release.
 
 ## What this guide doesn't do
 
