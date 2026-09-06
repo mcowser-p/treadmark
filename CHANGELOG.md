@@ -2,6 +2,15 @@
 
 All notable changes to cairn are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). After the initial release, entries below this line are appended automatically by `python-semantic-release` from conventional commit messages — don't edit them by hand.
 
+## v0.12.1 (2026-09-05)
+
+### Bug Fixes
+
+- The legacy standalone entry point (`treadmark.files.main()`) crashed
+  with a `TypeError` when dispatching `update`; it now returns exit
+  code 2 with the usual "update requires `--accept`" guidance, matching
+  the real CLI.
+
 ## v0.12.0 (2026-09-05)
 
 ### Features
