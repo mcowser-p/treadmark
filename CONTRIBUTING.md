@@ -9,7 +9,7 @@
 
 treadmark uses [Conventional Commits](https://www.conventionalcommits.org/) to drive automated releases. Every PR title that lands on `main` is parsed by [python-semantic-release](https://python-semantic-release.readthedocs.io/), which decides whether a release is warranted and what the next version number should be.
 
-You don't tag releases by hand. You don't bump the version in `pyproject.toml` by hand. Both happen automatically when a release-worthy commit hits `main`.
+You don't tag releases by hand, and as a contributor you never touch the version in `pyproject.toml`. Publishing is **PR-gated**: after release-worthy commits land, a maintainer merges a dedicated release PR that stamps the computed version, and only then does CI tag and publish (main's ruleset forbids direct pushes, so CI can't commit the bump itself).
 
 ## PR title format (this is enforced)
 
@@ -70,14 +70,8 @@ There's no closed list of valid scopes — use what makes sense. Common ones in 
 When your PR lands on `main`:
 
 1. **The `release` workflow runs.** It analyzes commits since the last tag.
-2. **If your commit type warrants a release** (`feat`, `fix`, `perf`, or anything with `BREAKING`), python-semantic-release:
-   - Computes the next version
-   - Writes it into `pyproject.toml`
-   - Updates `CHANGELOG.md`
-   - Commits with message `chore(release): X.Y.Z [skip ci]`
-   - Tags the commit `vX.Y.Z`
-   - Creates a GitHub Release
-3. **Build jobs fire automatically** and attach the .deb / .rpm / .msi / binaries / wheel to that release.
+2. **If your commit type warrants a release** (`feat`, `fix`, `perf`, or anything with `BREAKING`), the workflow computes the next version (`semantic-release version --print` — no side effects), builds the Linux and Windows artifacts at that version, and smoke-tests them on real distros / via the MSI. It then stops **without** tagging: publishing waits for a release PR.
+3. **A maintainer cuts and merges the release PR** (branch `release/vX.Y.Z`, title `chore(release): cut X.Y.Z`, stamping `pyproject.toml`, `src/treadmark/__init__.py`, and `CHANGELOG.md` — scaffolded by `scripts/release-pr.sh`). That merge re-runs the workflow; with pyproject now matching the computed version, it tags `vX.Y.Z`, creates the GitHub Release, attaches the .deb / .rpm / .msi / binaries + `SHA256SUMS`, and publishes the sdist + wheel to PyPI.
 4. **A `chore:` or `docs:` commit produces no release** — your change is on main but no version was cut. The next `feat:` or `fix:` will pick it up in the changelog.
 
 ## Local checks before opening a PR

@@ -26,7 +26,7 @@ least-privilege policy generation. Single binary, no agent, no daemon.
 | `src/treadmark/winsemantic.py` | Windows footprint parsers: services (from registry), scheduled tasks (from XML), path classification — pure, testable anywhere |
 | `tests/` | pytest suite — see "Testing" below |
 | `packaging/` | Shipped default configs, rpm spec, postinstall |
-| `scripts/` | Build scripts, `container-rootfs.sh` extraction helper |
+| `scripts/` | Build scripts, `release-pr.sh` release-PR scaffolder, `container-rootfs.sh` extraction helper |
 | `.claude/skills/` | Repo skills: `conventional-commits`, `release` |
 | `docs/` | Workflow docs (forensic, footprint, golden-baseline, output formats) |
 
@@ -64,14 +64,26 @@ decide whether to cut a release and what version to bump.** Full rules in
 - **Never use `!` or `BREAKING CHANGE:` casually** — on this 0.x project it
   jumps straight to 1.0.0.
 - Never hand-edit the version in `pyproject.toml`, never create tags, never
-  edit released sections of `CHANGELOG.md`. All three are owned by
-  semantic-release. The `[Unreleased]` CHANGELOG section may be edited.
+  edit released sections of `CHANGELOG.md`. The **only** place version and
+  changelog change is a release PR (created per the `release` skill, which
+  stamps them via `scripts/release-pr.sh`); tags are created exclusively by
+  CI. The `[Unreleased]` CHANGELOG section may be edited.
 - A local `commit-msg` hook enforces the format; enable with
   `git config core.hooksPath .githooks` (bootstrap.sh does this for you).
 
-To cut a release: land a `feat:` or `fix:` commit on `main` and let the
-`release` workflow do everything. See the `release` skill
-(`.claude/skills/release/SKILL.md`) for the full procedure and failure modes.
+To cut a release: land a `feat:` or `fix:` commit on `main`. The `release`
+workflow then computes the next version, builds and smoke-tests the
+artifacts — and stops there, because main's ruleset forbids direct pushes
+(CI cannot commit the version bump). A maintainer, or their coding agent,
+must then create and squash-merge a **release PR**: branch
+`release/vX.Y.Z`, title `chore(release): cut X.Y.Z`, stamping
+`pyproject.toml`, `src/treadmark/__init__.py`, and `CHANGELOG.md`
+(`bash scripts/release-pr.sh` scaffolds all of this; PR #19/#20 show the
+shape). Merging it re-runs the workflow, which — now that pyproject
+matches the computed version — tags `vX.Y.Z`, creates the GitHub Release,
+attaches Linux + Windows artifacts, and publishes to PyPI. See the
+`release` skill (`.claude/skills/release/SKILL.md`) for the full
+procedure and failure modes.
 
 ## Testing rules
 
@@ -121,10 +133,11 @@ To cut a release: land a `feat:` or `fix:` commit on `main` and let the
   github.com/mcowser-p/treadmark, GitHub-noreply maintainer address). Two values
   are permanent — do not change: the WiX `UpgradeCode` GUID and the MSI
   state registry path `Software\mcowser-p\Treadmark` (functional, not cosmetic).
-- Windows CI is re-enabled but SOAKING: the release.yml windows jobs are
-  `continue-on-error` so a flake can't hold Linux releases hostage. Flip to
-  blocking (add them to attach.needs, drop continue-on-error) after a couple
-  of clean releases. Org strings + License.rtf in windows/ are still
+- The release.yml `windows` job (exe + MSI build + MSI smoke) is now a
+  **blocking release gate** — in `release`/`attach` needs, no
+  continue-on-error; that soak is over. Still soaking: the `windows-11`
+  arm64 footprint job stays `continue-on-error` (a probe must not gate
+  releases). Org strings + License.rtf in windows/ are still
   placeholders (SETUP.md pre-publish TODO) — MSI installs, not brand-correct.
 - Windows semantic footprint: **services and scheduled tasks are now parsed**
   (`src/treadmark/winsemantic.py`; `treadmark footprint` dispatches to
